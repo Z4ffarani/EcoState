@@ -1,0 +1,21 @@
+# ── Frontend ──────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/.env*.local
+frontend/out/
+frontend/.vercel/
+
+# ── Backend ───────────────────────────────
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/.env
+
+# ── OS / Editor ───────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
