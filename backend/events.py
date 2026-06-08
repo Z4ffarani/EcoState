@@ -1,5 +1,5 @@
 import random
-from EcoState.backend.models import ActiveEvent
+from models import ActiveEvent
 
 CRISIS_EVENTS = [
     {

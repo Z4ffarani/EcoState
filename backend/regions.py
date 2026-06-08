@@ -1,4 +1,4 @@
-from EcoState.backend.models import RegionType, SeasonType
+from models import RegionType, SeasonType
 
 # Base initial values for all vectors (0-100 scale)
 BASE_VECTORS = {

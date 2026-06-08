@@ -7,10 +7,10 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, stat
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from EcoState.backend.models import CreateSessionRequest, ResourceAction, UpdateProfileRequest, WSMessage
-from EcoState.backend.session_manager import create_session, load_session, save_session, delete_session, get_platform_groups
-from EcoState.backend.simulation_engine import tick, _clamp
-from EcoState.backend.security import (
+from models import CreateSessionRequest, ResourceAction, UpdateProfileRequest, WSMessage
+from session_manager import create_session, load_session, save_session, delete_session, get_platform_groups
+from simulation_engine import tick, _clamp
+from security import (
     create_token, decode_token,
     validate_ws_origin, check_rate_limit, cleanup_rate_limit,
     ALLOWED_ORIGINS,

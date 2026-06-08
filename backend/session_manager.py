@@ -5,9 +5,9 @@ Sessions have a TTL of 2 hours.
 import json
 import os
 import uuid
-from EcoState.backend.models import GameState, CreateSessionRequest
-from EcoState.backend.regions import get_initial_vectors
-from EcoState.backend.simulation_engine import PLATFORM_GROUPS, compute_progress
+from models import GameState, CreateSessionRequest
+from regions import get_initial_vectors
+from simulation_engine import PLATFORM_GROUPS, compute_progress
 
 try:
     import redis.asyncio as aioredis
@@ -57,7 +57,7 @@ def _session_key(session_id: str) -> str:
 async def create_session(req: CreateSessionRequest) -> GameState:
     session_id = str(uuid.uuid4())
     vectors_raw = get_initial_vectors(req.region, req.season)
-    from EcoState.backend.models import VectorState
+    from models import VectorState
     vectors = {k: VectorState(**v) for k, v in vectors_raw.items()}
 
     initial_progress = compute_progress({k: v.model_dump() for k, v in vectors.items()})

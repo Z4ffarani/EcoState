@@ -4,9 +4,9 @@ All vector values live on a 0-100 scale.
 Vectors tagged as 'inverse' are better when LOW (co2, waste, radiation).
 """
 from copy import deepcopy
-from EcoState.backend.models import GameState, RegionType, SeasonType, ActiveEvent
-from EcoState.backend.regions import REGION_MODIFIERS
-from EcoState.backend.events import roll_events, tick_events
+from models import GameState, RegionType, SeasonType, ActiveEvent
+from regions import REGION_MODIFIERS
+from events import roll_events, tick_events
 
 # Which vectors are better when LOW
 INVERSE_VECTORS = {"co2", "waste", "radiation"}
@@ -218,7 +218,7 @@ def tick(state: GameState) -> GameState:
         v[key]["trend"] = round(v[key]["value"] - prev, 2)
 
     # 8. Rebuild vector models
-    from EcoState.backend.models import VectorState
+    from models import VectorState
     state.vectors = {k: VectorState(**vd) for k, vd in v.items()}
 
     # 9. Supply income — grows when key vectors are healthy
