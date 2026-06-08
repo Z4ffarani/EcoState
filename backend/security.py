@@ -10,7 +10,9 @@ from collections import defaultdict
 from jose import jwt, JWTError
 from fastapi import HTTPException, status, WebSocket
 
-SECRET_KEY = os.getenv("JWT_SECRET", "ecostate-dev-secret-change-in-production")
+SECRET_KEY = os.environ.get("JWT_SECRET")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET environment variable is not set")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_SECONDS = 7200  # 2 hours
 

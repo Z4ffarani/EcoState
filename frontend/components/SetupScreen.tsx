@@ -39,7 +39,7 @@ export default function SetupScreen({ onStart }: Props) {
   }
 
   return (
-    <div className="flex items-center justify-center w-full h-full bg-eco-bg">
+    <div className="flex items-center justify-center w-full h-full bg-eco-bg px-4 py-6 overflow-y-auto">
       <div
         className="absolute inset-0 opacity-10"
         style={{
@@ -49,7 +49,7 @@ export default function SetupScreen({ onStart }: Props) {
         }}
       />
 
-      <div className="eco-panel relative z-10 p-8 w-full max-w-md">
+      <div className="eco-panel relative z-10 p-5 sm:p-8 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <img src="/full-logo.png" alt="EcoState" className="mx-auto max-h-12 max-w-full w-auto" />

@@ -40,7 +40,7 @@ export default function ProgressBar() {
     <>
       {loading && <LoadingOverlay message="Iniciando nova partida..." />}
 
-      <div className="eco-panel absolute bottom-4 left-1/2 -translate-x-1/2 w-[600px] max-w-[90vw] px-4 py-3 z-10">
+      <div className="eco-panel absolute bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-[600px] max-w-[calc(100vw-2rem)] px-4 py-3 z-10">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs text-eco-muted uppercase tracking-widest">Progresso do Estado</span>
           <span className="text-sm font-bold" style={{ color }}>{progress.toFixed(1)}%</span>
