@@ -1,8 +1,8 @@
-# EcoState
+![EcoState](frontend/public/banner.png)
 
-**Simulador de sobrevivência 3D em tempo real** — gerencie os recursos de um estado sustentável e tome decisões que impactam o futuro do planeta ou de uma colônia espacial.
+EcoState é uma plataforma de simulação em tempo real onde o jogador governa um estado — terrestre, lunar ou marciano — gerenciando recursos e respondendo a crises para garantir sua sobrevivência e prosperidade. Concebido para explorar tanto a economia espacial em expansão quanto cenários de sobrevivência em condições extremas, o protótipo serve como ambiente didático e informativo sobre as interdependências entre meio ambiente, energia, economia e governança.
 
-Projeto desenvolvido para a **FIAP Global Solution 2026** — tema: tecnologia como alicerce para um ecossistema resiliente.
+A simulação rastreia **12 vetores de estado** distribuídos em quatro plataformas (Terrestre, Energia, Econômica e Governança), cada um com tendência em tempo real e eventos críticos aleatórios. O jogador aloca um pool de suprimentos finito para ajustar vetores e manter o progresso do estado através de limiares crescentes — enquanto crises climáticas, epidemias ou falhas energéticas testam sua resiliência. Projetado como protótipo escalável, a arquitetura separa claramente front-end (Next.js + Three.js), back-end (FastAPI + WebSocket) e persistência (Redis), pronta para crescer tanto em profundidade de simulação quanto em tecnologias integradas.
 
 ---
 
@@ -10,8 +10,8 @@ Projeto desenvolvido para a **FIAP Global Solution 2026** — tema: tecnologia c
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | Next.js 15, React 19, Three.js / R3F, Tailwind CSS v4 |
-| Backend | Python 3.12, FastAPI, WebSocket (uvicorn) |
+| Front-end | Next.js 15, React 19, Three.js / R3F, Tailwind CSS v4 |
+| Back-end | Python 3.12, FastAPI, WebSocket (uvicorn) |
 | Sessões | Redis (TTL 2h) com fallback in-memory |
 | Autenticação | JWT HS256 (`python-jose`) |
 | Deploy | Railway (Docker) |
@@ -27,13 +27,13 @@ Browser (usuário)
     ▼
 Railway CDN / TLS termination
     │
-    ├── Frontend  (Next.js · porta 3000)
-    └── Backend   (FastAPI · porta 8000)
+    ├── Front-end  (Next.js · porta 3000)
+    └── Back-end   (FastAPI · porta 8000)
                       │
                       └── Redis  (sessões · TTL 2h)
 ```
 
-Todo o tráfego externo trafega sobre **TLS 1.2+** (HTTPS/WSS) — fornecido pelo Railway. A comunicação Frontend → Backend usa JWT em cada requisição REST e na abertura do WebSocket.
+Todo o tráfego externo trafega sobre **TLS 1.2+** (HTTPS/WSS) — fornecido pelo Railway. A comunicação Front-end → Back-end usa JWT em cada requisição REST e na abertura do WebSocket.
 
 ---
 
@@ -42,7 +42,7 @@ Todo o tráfego externo trafega sobre **TLS 1.2+** (HTTPS/WSS) — fornecido pel
 ### Pré-requisitos
 - Node.js 22+, Python 3.12+, Redis (opcional — usa memória se ausente)
 
-### Backend
+### Back-end
 
 ```bash
 cd backend
@@ -58,7 +58,7 @@ cp .env.example .env
 env $(cat .env | xargs) python main.py
 ```
 
-### Frontend
+### Front-end
 
 ```bash
 cd frontend
@@ -80,19 +80,17 @@ Acesse: `http://localhost:3000`
 
 | Serviço | Root Directory | Variáveis de Ambiente |
 |---|---|---|
-| backend | `backend/` | `JWT_SECRET`, `ALLOWED_ORIGINS` |
-| frontend | `frontend/` | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL` |
+| Back-end | `backend/` | `JWT_SECRET`, `ALLOWED_ORIGINS` |
+| Front-end | `frontend/` | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL` |
 
 > `REDIS_URL` é injetado automaticamente pelo plugin Redis do Railway.
-> Após o frontend estar no ar, atualize `ALLOWED_ORIGINS` no backend com a URL gerada e faça **Redeploy**.
+> Após o front-end estar no ar, atualize `ALLOWED_ORIGINS` no back-end com a URL gerada e faça **Redeploy**.
 
 ---
 
 ---
 
-# 🔐 Cybersecurity — FIAP Global Solution 2026
-
-> Esta seção atende aos critérios da disciplina de Cybersecurity do 3ES e documenta as camadas de segurança integradas ao EcoState.
+# 🔐 Cybersecurity
 
 ---
 
@@ -132,7 +130,7 @@ Acesse: `http://localhost:3000`
 
 #### Vetor 3 — Cross-Origin WebSocket Hijacking (CSWSH)
 
-**Como aconteceria:** Uma página maliciosa hospedada em `https://atacante.com` tenta abrir uma conexão WebSocket para o backend do EcoState usando o token de um usuário legítimo (obtido via XSS ou outro meio). Como WebSockets não seguem a política Same-Origin do browser automaticamente para handshake, o servidor precisaria validar a origem manualmente.
+**Como aconteceria:** Uma página maliciosa hospedada em `https://atacante.com` tenta abrir uma conexão WebSocket para o back-end do EcoState usando o token de um usuário legítimo (obtido via XSS ou outro meio). Como WebSockets não seguem a política Same-Origin do browser automaticamente para handshake, o servidor precisaria validar a origem manualmente.
 
 **Controles aplicados:**
 - Validação do header `Origin` no handshake WebSocket contra a allowlist `ALLOWED_ORIGINS`
@@ -145,7 +143,7 @@ Acesse: `http://localhost:3000`
 
 **Controles aplicados:**
 - Em produção, todo o tráfego é servido exclusivamente via **HTTPS e WSS** (TLS 1.2+ obrigatório pelo Railway)
-- O frontend valida as variáveis `NEXT_PUBLIC_API_URL` (`https://`) e `NEXT_PUBLIC_WS_URL` (`wss://`) — sem fallback para HTTP em produção
+- O front-end valida as variáveis `NEXT_PUBLIC_API_URL` (`https://`) e `NEXT_PUBLIC_WS_URL` (`wss://`) — sem fallback para HTTP em produção
 - O HSTS é aplicado pelo CDN do Railway
 
 #### Vetor 5 — Injeção via Input do Usuário
@@ -156,7 +154,7 @@ Acesse: `http://localhost:3000`
 - Todos os inputs da API são validados por **modelos Pydantic** (`models.py`) com tipagem estrita — dados inválidos retornam HTTP 422 antes de chegar à lógica de negócio
 - Valores de vetores são limitados ao intervalo `[0, 100]` por `_clamp()` na engine de simulação
 - `user_name` tem `max_length=32`
-- No frontend, React escapa automaticamente todo conteúdo renderizado — sem uso de `dangerouslySetInnerHTML`
+- No front-end, React escapa automaticamente todo conteúdo renderizado — sem uso de `dangerouslySetInnerHTML`
 
 ---
 
@@ -175,9 +173,9 @@ GET  /ws?token=<jwt>    → requer JWT válido  → stream da própria sessão
 ```
 
 **Fluxo de autenticação:**
-1. Frontend envia `POST /session` com nome/região/estação
-2. Backend cria sessão com UUID aleatório, assina JWT com `JWT_SECRET`
-3. JWT é retornado ao frontend e armazenado em memória (Zustand) — **não em localStorage ou cookie**
+1. Front-end envia `POST /session` com nome/região/estação
+2. Back-end cria sessão com UUID aleatório, assina JWT com `JWT_SECRET`
+3. JWT é retornado ao front-end e armazenado em memória (Zustand) — **não em localStorage ou cookie**
 4. Toda requisição subsequente inclui `Authorization: Bearer <token>`
 5. Token expira em 2 horas; sessão no Redis expira no mesmo período
 
@@ -190,7 +188,7 @@ GET  /ws?token=<jwt>    → requer JWT válido  → stream da própria sessão
 | Estado da simulação | TLS 1.2+ (HTTPS/WSS) | Redis serializado JSON + TTL 2h (auto-expira) |
 | JWT | TLS 1.2+ | Memória do browser (Zustand) — nunca em disco |
 | `JWT_SECRET` | Nunca trafega | Variável de ambiente do servidor — nunca no código |
-| Dados pessoais | TLS 1.2+ | Apenas `user_name` (até 32 chars) — sem email, CPF, senha |
+| Dados pessoais | TLS 1.2+ | Apenas `user_name` (até 32 chars) — sem e-mail, CPF, senha |
 
 **Minimização de dados (Privacy by Design):** O EcoState coleta exclusivamente o nome do operador (campo livre, sem verificação de identidade real), região e estação do ano escolhidos. Nenhum dado de localização real, comportamental, ou identificador pessoal é coletado ou armazenado.
 
@@ -198,13 +196,13 @@ GET  /ws?token=<jwt>    → requer JWT válido  → stream da própria sessão
 
 ### 2.3 Segurança da Infraestrutura
 
-**Containers não-root:** Ambos os Dockerfiles (frontend e backend) criam um usuário de sistema dedicado (`appuser`) e rodam o processo principal sem privilégios root — limitando o impacto de uma eventual exploração de vulnerabilidade na aplicação.
+**Containers não-root:** Ambos os Dockerfiles (front-end e back-end) criam um usuário de sistema dedicado (`appuser`) e rodam o processo principal sem privilégios root — limitando o impacto de uma eventual exploração de vulnerabilidade na aplicação.
 
-**Isolamento de build:** O `.dockerignore` do backend exclui `venv/`, `__pycache__/` e `.env*` da imagem final — reduzindo a superfície de ataque e o tamanho do artefato.
+**Isolamento de build:** O `.dockerignore` do back-end exclui `venv/`, `__pycache__/` e `.env*` da imagem final — reduzindo a superfície de ataque e o tamanho do artefato.
 
 **Segredos por variável de ambiente:** Nenhum segredo (`JWT_SECRET`, `REDIS_URL`, `ALLOWED_ORIGINS`) está presente no código-fonte ou na imagem Docker. Todos são injetados pelo Railway em tempo de execução.
 
-**CORS restritivo:** O middleware CORS do FastAPI aceita requisições apenas da origem configurada em `ALLOWED_ORIGINS`. Em produção, isso é a URL exata do frontend no Railway — qualquer outra origem recebe HTTP 403.
+**CORS restritivo:** O middleware CORS do FastAPI aceita requisições apenas da origem configurada em `ALLOWED_ORIGINS`. Em produção, isso é a URL exata do front-end no Railway — qualquer outra origem recebe HTTP 403.
 
 **Rate limiting WebSocket:** Sliding window de 10 segundos com limite de 20 mensagens por conexão — protege contra flooding sem bloquear uso legítimo.
 
@@ -240,7 +238,7 @@ O EcoState aplica os seguintes princípios alinhados à **Lei Geral de Proteçã
 
 **Transparência:** O usuário é informado na tela inicial sobre o que está configurando (nome, região, estação) antes de iniciar.
 
-**Sem compartilhamento:** Nenhum dado é enviado a terceiros, analíticos, ou serviços de rastreamento. O frontend não inclui scripts de terceiros (Google Analytics, Meta Pixel, etc.).
+**Sem compartilhamento:** Nenhum dado é enviado a terceiros, analíticos, ou serviços de rastreamento. O front-end não inclui scripts de terceiros (Google Analytics, Meta Pixel, etc.).
 
 **Sem dados comportamentais:** As ações do usuário dentro da simulação (ajustes de vetores) são processadas em tempo real e não são armazenadas como histórico ou perfil comportamental.
 
@@ -282,7 +280,7 @@ O plano segue as fases **Contenção → Erradicação → Recuperação → Li�
 | Auditoria do código-fonte | Verificar se o secret foi commitado acidentalmente no Git; usar `git log -S "JWT_SECRET"` para busca no histórico |
 | Remoção do histórico (se necessário) | `git filter-branch` ou `BFG Repo Cleaner` para apagar o segredo do histórico Git; notificar GitHub para invalidar cache |
 | Revisão das variáveis de ambiente | Confirmar que nenhum outro segredo está exposto (REDIS_URL, etc.) |
-| Atualizar dependências vulneráveis | `pip audit` no backend, `npm audit` no frontend — aplicar patches |
+| Atualizar dependências vulneráveis | `pip audit` no back-end, `npm audit` no front-end — aplicar patches |
 
 ---
 
@@ -311,7 +309,7 @@ O plano segue as fases **Contenção → Erradicação → Recuperação → Li�
 | Mecanismo | Descrição |
 |---|---|
 | **Restart automático** | `railway.toml`: `restartPolicyType = "ON_FAILURE"` — containers reiniciam automaticamente após falha |
-| **Fallback de sessões** | Se o Redis ficar indisponível, o backend cai para armazenamento em memória sem interromper o serviço |
+| **Fallback de sessões** | Se o Redis ficar indisponível, o back-end cai para armazenamento em memória sem interromper o serviço |
 | **Shutdown gracioso** | Tasks de simulação são canceladas limpiamente ao desligar — sem corrupção de estado |
 | **TTL de sessão** | Sessões orphaned (sem WebSocket conectado) expiram automaticamente em 2h, liberando memória |
 | **Imagens Docker imutáveis** | Cada deploy gera uma nova imagem; rollback é possível via Railway com um clique |
@@ -335,4 +333,17 @@ O plano segue as fases **Contenção → Erradicação → Recuperação → Li�
 
 ---
 
-*EcoState — FIAP Global Solution 2026 · Cybersecurity 3ES*
+## Tecnologias
+
+![Next.js](https://img.shields.io/badge/Next.js_15-000000?style=flat-square&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat-square&logo=threedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![Python](https://img.shields.io/badge/Python_3.12-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![WebSocket](https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)
