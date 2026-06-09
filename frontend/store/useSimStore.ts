@@ -41,7 +41,7 @@ export const useSimStore = create<SimStore>((set) => ({
   sessionId: null,
   connected: false,
   selectedVector: null,
-  showMenu: false,
+  showMenu: true,
   platformTooltip: null,
   platformModal: null,
   sessionParams: null,

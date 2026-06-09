@@ -20,13 +20,13 @@ BASE_DECAY: dict[str, float] = {
     "oxygen":         0.3,
     "co2":            0.5,   # CO2 accumulates naturally
     "temperature":    0.0,
-    "humidity":       0.2,
+    "water_quality":  0.3,   # quality degrades without treatment
     "waste":          0.8,   # waste accumulates naturally
     "health":         0.15,
     "radiation":      0.0,
     "pressure":       0.0,
     "light":          0.0,
-    "photosynthesis": 0.0,   # fully derived
+    "biodiversity":   0.0,   # fully derived
     "infrastructure":  0.1,
     "medical":        0.2,
 }
@@ -48,11 +48,11 @@ INVERSE_CRITICAL_THRESHOLD = 75.0
 
 # Platform groupings for frontend
 PLATFORM_GROUPS = {
-    "bio":    ["vegetation", "food", "photosynthesis"],
-    "hydro":  ["water", "humidity"],
+    "bio":    ["vegetation", "food", "biodiversity"],
+    "hydro":  ["water", "water_quality"],
     "power":  ["energy", "light"],
-    "atmo":   ["oxygen", "co2", "pressure"],
-    "health": ["health", "medical", "radiation", "temperature"],
+    "atmo":   ["oxygen", "co2", "pressure", "temperature"],
+    "health": ["health", "medical", "radiation"],
     "tech":   ["infrastructure", "waste"],
 }
 
@@ -116,22 +116,35 @@ def apply_interdependencies(v: dict) -> dict:
         v["vegetation"]["value"] -= 3 * deficit
         v["food"]["value"] -= 1.5 * deficit
 
-    # Light + Water → Photosynthesis (derived)
-    photo = (v["light"]["value"] * 0.4 + v["vegetation"]["value"] * 0.35 + v["water"]["value"] * 0.25)
-    photo = _clamp(photo * 0.95)
-    prev = v["photosynthesis"]["value"]
-    v["photosynthesis"]["value"] = round((prev * 0.6 + photo * 0.4), 2)
+    # Waste ↑ → Water Quality ↓ (contamination)
+    if v["waste"]["value"] > 50:
+        excess = (v["waste"]["value"] - 50) / 50
+        v["water_quality"]["value"] -= excess * 2.5
 
-    # Photosynthesis → Oxygen
-    if v["photosynthesis"]["value"] < 40:
-        deficit = (40 - v["photosynthesis"]["value"]) / 40
+    # Water Quality ↓ → Vegetation, Health (contaminated water)
+    if v["water_quality"]["value"] < 40:
+        deficit = (40 - v["water_quality"]["value"]) / 40
+        v["vegetation"]["value"] -= 1.5 * deficit
+        v["health"]["value"] -= 1.5 * deficit
+
+    # Vegetation + Water Quality + Temperature + Light → Biodiversity (derived)
+    temp_score = max(0.0, 100.0 - abs(v["temperature"]["value"] - 50) * 2)
+    bio = (v["vegetation"]["value"] * 0.40 + v["water_quality"]["value"] * 0.30
+           + temp_score * 0.20 + v["light"]["value"] * 0.10)
+    bio = _clamp(bio * 0.95)
+    prev = v["biodiversity"]["value"]
+    v["biodiversity"]["value"] = round((prev * 0.6 + bio * 0.4), 2)
+
+    # Biodiversity → Oxygen (ecosystems produce O₂)
+    if v["biodiversity"]["value"] < 40:
+        deficit = (40 - v["biodiversity"]["value"]) / 40
         v["oxygen"]["value"] -= 2.5 * deficit
 
     # CO2 ↑ → Oxygen ↓
     if v["co2"]["value"] > 55:
         v["oxygen"]["value"] -= (v["co2"]["value"] - 55) * 0.04
 
-    # Energy ↓ → Communication, Light, Medical degrade
+    # Energy ↓ → Infrastructure, Light, Medical degrade
     if v["energy"]["value"] < 30:
         deficit = (30 - v["energy"]["value"]) / 30
         v["infrastructure"]["value"] -= 4 * deficit
@@ -148,11 +161,10 @@ def apply_interdependencies(v: dict) -> dict:
         v["health"]["value"] -= temp_dist * 2
         v["vegetation"]["value"] -= temp_dist * 1.5
 
-    # Waste ↑ → Health, Water
+    # Waste ↑ → Health (direct, beyond water quality effect)
     if v["waste"]["value"] > 65:
         excess = (v["waste"]["value"] - 65) / 35
-        v["health"]["value"] -= excess * 2.5
-        v["water"]["value"] -= excess * 1.5
+        v["health"]["value"] -= excess * 2.0
 
     # Pressure ↓ → Health, Oxygen
     if v["pressure"]["value"] < 35:
@@ -178,9 +190,13 @@ def apply_interdependencies(v: dict) -> dict:
     if v["vegetation"]["value"] > 50:
         v["food"]["value"] += (v["vegetation"]["value"] - 50) * 0.01
 
-    # Photosynthesis absorbs CO₂ (plants fix carbon)
-    if v["photosynthesis"]["value"] > 50:
-        v["co2"]["value"] -= (v["photosynthesis"]["value"] - 50) * 0.05
+    # Biodiversity absorbs CO₂ (ecosystem fixes carbon)
+    if v["biodiversity"]["value"] > 50:
+        v["co2"]["value"] -= (v["biodiversity"]["value"] - 50) * 0.05
+
+    # Biodiversity supports food diversity
+    if v["biodiversity"]["value"] > 60:
+        v["food"]["value"] += (v["biodiversity"]["value"] - 60) * 0.015
 
     # Energy + Communication power recycling systems → reduce waste
     if v["energy"]["value"] > 50 and v["infrastructure"]["value"] > 50:

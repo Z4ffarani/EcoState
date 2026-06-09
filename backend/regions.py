@@ -9,13 +9,13 @@ BASE_VECTORS = {
     "oxygen":        {"value": 82.0, "label": "Oxygen",       "unit": "%"},
     "co2":           {"value": 18.0, "label": "CO₂",          "unit": "%"},
     "temperature":   {"value": 50.0, "label": "Temperature",  "unit": "norm"},
-    "humidity":      {"value": 50.0, "label": "Humidity",     "unit": "%"},
+    "water_quality": {"value": 80.0, "label": "Water Qual.",  "unit": "%"},
     "waste":         {"value": 10.0, "label": "Waste",        "unit": "%"},
     "health":        {"value": 88.0, "label": "Health",       "unit": "%"},
     "radiation":     {"value": 12.0, "label": "Radiation",    "unit": "%"},
     "pressure":      {"value": 82.0, "label": "Pressure",     "unit": "%"},
     "light":         {"value": 70.0, "label": "Light",        "unit": "%"},
-    "photosynthesis":{"value": 60.0, "label": "Photosynth.",  "unit": "%"},
+    "biodiversity":  {"value": 65.0, "label": "Biodiversity", "unit": "%"},
     "infrastructure": {"value": 78.0, "label": "Infra",        "unit": "%"},
     "medical":       {"value": 72.0, "label": "Medical",      "unit": "%"},
 }
@@ -27,7 +27,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "emoji": "🌴",
         "base": {
             "water": +20, "light": +20, "temperature": +15,
-            "humidity": +30, "vegetation": +20, "radiation": -5,
+            "water_quality": +15, "vegetation": +20, "radiation": -5,
         },
         "decay": {"water": -0.4},
         "space": False,
@@ -37,7 +37,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "emoji": "🏜️",
         "base": {
             "water": -40, "light": +15, "temperature": +30,
-            "humidity": -30, "radiation": +20, "vegetation": -20,
+            "water_quality": -25, "radiation": +20, "vegetation": -20,
             "food": -15,
         },
         "decay": {"water": +0.6, "temperature": +0.2},
@@ -48,7 +48,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "emoji": "🧊",
         "base": {
             "temperature": -45, "light": -30, "water": -10,
-            "vegetation": -30, "food": -20, "humidity": -20,
+            "vegetation": -30, "food": -20, "water_quality": -10,
         },
         "decay": {"energy": +0.6, "temperature": +0.3},
         "space": False,
@@ -58,7 +58,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "emoji": "🌊",
         "base": {
             "water": +35, "pressure": -12, "infrastructure": -20,
-            "humidity": +35, "food": +10,
+            "water_quality": +20, "food": +10,
         },
         "decay": {"infrastructure": +0.2},
         "space": False,
@@ -91,7 +91,7 @@ REGION_MODIFIERS: dict[str, dict] = {
 SEASON_MODIFIERS: dict[str, dict] = {
     SeasonType.SPRING: {
         "name": "Spring",
-        "base": {"light": +10, "water": +10, "vegetation": +15, "humidity": +10},
+        "base": {"light": +10, "water": +10, "vegetation": +15, "water_quality": +10},
     },
     SeasonType.SUMMER: {
         "name": "Summer",

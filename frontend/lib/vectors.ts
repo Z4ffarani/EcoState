@@ -1,8 +1,8 @@
 export type VectorKey =
   | 'water' | 'energy' | 'vegetation' | 'food'
-  | 'oxygen' | 'co2' | 'temperature' | 'humidity'
+  | 'oxygen' | 'co2' | 'temperature' | 'water_quality'
   | 'waste' | 'health' | 'radiation' | 'pressure'
-  | 'light' | 'photosynthesis' | 'infrastructure' | 'medical'
+  | 'light' | 'biodiversity' | 'infrastructure' | 'medical'
 
 export interface VectorState {
   value: number
@@ -53,13 +53,13 @@ export const VECTOR_LABELS_PT: Record<VectorKey, string> = {
   oxygen:        'Oxigênio',
   co2:           'CO₂',
   temperature:   'Temperatura',
-  humidity:      'Umidade',
+  water_quality: 'Qual. da Água',
   waste:         'Resíduos',
   health:        'Saúde Geral',
   radiation:     'Radiação',
   pressure:      'Pr. Atmosférica',
   light:         'Luminosidade',
-  photosynthesis:'Fotossíntese',
+  biodiversity:  'Biodiversidade',
   infrastructure: 'Infraestrutura',
   medical:       'Itens Médicos',
 }
@@ -77,12 +77,12 @@ export const EVENT_NAMES_PT: Record<string, string> = {
 }
 
 export const PLATFORMS: PlatformDef[] = [
-  { id: 'bio',    label: 'Biosfera',   vectors: ['vegetation', 'food', 'photosynthesis'],          color: '#22c55e', angle: 0   },
-  { id: 'hydro',  label: 'Hidrologia', vectors: ['water', 'humidity'],                             color: '#3b82f6', angle: 60  },
-  { id: 'power',  label: 'Energia',    vectors: ['energy', 'light'],                               color: '#eab308', angle: 120 },
-  { id: 'atmo',   label: 'Atmosfera',  vectors: ['oxygen', 'co2', 'pressure'],                     color: '#06b6d4', angle: 180 },
-  { id: 'health', label: 'Saúde',      vectors: ['health', 'medical', 'radiation', 'temperature'], color: '#ef4444', angle: 240 },
-  { id: 'tech',   label: 'Tecnologia', vectors: ['infrastructure', 'waste'],                        color: '#f97316', angle: 300 },
+  { id: 'bio',    label: 'Biosfera',   vectors: ['vegetation', 'food', 'biodiversity'],              color: '#22c55e', angle: 0   },
+  { id: 'hydro',  label: 'Hidrologia', vectors: ['water', 'water_quality'],                         color: '#3b82f6', angle: 60  },
+  { id: 'power',  label: 'Energia',    vectors: ['energy', 'light'],                                color: '#eab308', angle: 120 },
+  { id: 'atmo',   label: 'Atmosfera',  vectors: ['oxygen', 'co2', 'pressure', 'temperature'],       color: '#06b6d4', angle: 180 },
+  { id: 'health', label: 'Saúde',      vectors: ['health', 'medical', 'radiation'],                 color: '#ef4444', angle: 240 },
+  { id: 'tech',   label: 'Tecnologia', vectors: ['infrastructure', 'waste'],                         color: '#f97316', angle: 300 },
 ]
 
 export const REGIONS = [

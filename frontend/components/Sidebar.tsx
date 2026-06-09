@@ -156,29 +156,27 @@ export default function Sidebar() {
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 lg:pb-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
 
-          {/* Active events */}
-          {state.active_events.length > 0 && (
-            <div className="bg-red-900/20 border border-red-700/40 rounded-md px-3 py-2 space-y-1">
-              {state.active_events.map((e) => (
-                <div key={e.id} className="flex items-start gap-2 text-xs text-red-400 eco-critical">
-                  <span className="shrink-0 mt-[1px]">⚠</span>
-                  <span>
-                    {EVENT_NAMES_PT[e.name] ?? e.name}
-                    <span className="text-red-400/55 ml-1">({e.ticks_remaining} turnos)</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* Session actions */}
           <div className="flex gap-2">
             <ExitButton />
             <RestartButton label="Reiniciar" />
           </div>
 
-          {/* Supply bar — sticky so it stays visible while scrolling vectors */}
-          <div className="sticky top-0 z-10 -mx-4 px-4 py-2" style={{ background: 'rgba(8, 15, 22, 0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+          {/* Sticky: active events + supply bar */}
+          <div className="sticky top-0 z-10 -mx-4 px-4 pb-2 pt-1" style={{ background: 'rgba(8, 15, 22, 0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+            {state.active_events.length > 0 && (
+              <div className="mb-2 bg-red-900/20 border border-red-700/40 rounded-md px-3 py-2 space-y-1">
+                {state.active_events.map((e) => (
+                  <div key={e.id} className="flex items-start gap-2 text-xs text-red-400 eco-critical">
+                    <span className="shrink-0 mt-[1px]">⚠</span>
+                    <span>
+                      {EVENT_NAMES_PT[e.name] ?? e.name}
+                      <span className="text-red-400/55 ml-1">({e.ticks_remaining} turnos)</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="p-3 rounded-md border border-eco-border bg-eco-bg/40 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-eco-muted uppercase tracking-wider">Reserva de Suprimentos</span>
@@ -286,7 +284,7 @@ export default function Sidebar() {
                         </div>
                       )}
                       {showMenu && isInverse && (
-                        <div className="pl-[94px] mt-1 mb-0.5">
+                        <div className="pl-[94px] mt-0.5">
                           <span className={clsx(
                             'text-[9px] italic',
                             v.critical ? 'text-red-400/80' : v.value > 55 ? 'text-amber-400/70' : 'text-eco-muted/50'
