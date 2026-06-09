@@ -12,6 +12,48 @@ import VictoryModal from '@/components/VictoryModal'
 
 const SimulatorScene = dynamic(() => import('@/components/SimulatorScene'), { ssr: false })
 
+function PlatformModal() {
+  const modalId = useSimStore((s) => s.platformModal)
+  const setPlatformModal = useSimStore((s) => s.setPlatformModal)
+  const state = useSimStore((s) => s.state)
+  if (!modalId || !state) return null
+
+  const platform = PLATFORMS.find((p) => p.id === modalId)
+  if (!platform) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[60]" onClick={() => setPlatformModal(null)} />
+      <div className="fixed z-[61] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 eco-panel px-4 py-3 min-w-[180px]">
+        <div className="flex items-center justify-between mb-2 gap-4">
+          <div className="text-sm font-bold" style={{ color: platform.color }}>{platform.label}</div>
+          <button
+            onClick={() => setPlatformModal(null)}
+            className="text-eco-muted hover:text-white transition-colors shrink-0"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          {platform.vectors.map((vKey) => {
+            const v = state.vectors[vKey]
+            if (!v) return null
+            return (
+              <div key={vKey} className="text-[11px] flex items-center justify-between gap-6">
+                <span className="text-eco-muted">{VECTOR_LABELS_PT[vKey] || vKey}</span>
+                <span className="font-mono font-bold text-white">{Math.round(v.value)}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
+
 function PlatformTooltip() {
   const tooltip = useSimStore((s) => s.platformTooltip)
   const state = useSimStore((s) => s.state)
@@ -62,6 +104,7 @@ function SimulatorView() {
 
         <ProgressBar />
         <PlatformTooltip />
+        <PlatformModal />
       </div>
       <VictoryModal />
     </div>

@@ -21,6 +21,7 @@ interface SimStore {
   selectedVector: string | null
   showMenu: boolean
   platformTooltip: PlatformTooltip | null
+  platformModal: string | null
   sessionParams: SessionParams | null
 
   setState: (s: GameState) => void
@@ -29,6 +30,7 @@ interface SimStore {
   setSelectedVector: (v: string | null) => void
   toggleMenu: () => void
   setPlatformTooltip: (t: PlatformTooltip | null) => void
+  setPlatformModal: (id: string | null) => void
   setSessionParams: (p: SessionParams) => void
   reset: () => void
 }
@@ -41,6 +43,7 @@ export const useSimStore = create<SimStore>((set) => ({
   selectedVector: null,
   showMenu: false,
   platformTooltip: null,
+  platformModal: null,
   sessionParams: null,
 
   setState: (s) => set({ state: s }),
@@ -49,6 +52,7 @@ export const useSimStore = create<SimStore>((set) => ({
   setSelectedVector: (v) => set({ selectedVector: v }),
   toggleMenu: () => set((prev) => ({ showMenu: !prev.showMenu })),
   setPlatformTooltip: (t) => set({ platformTooltip: t }),
+  setPlatformModal: (id) => set({ platformModal: id }),
   setSessionParams: (p) => set({ sessionParams: p }),
-  reset: () => set({ state: null, token: null, sessionId: null, connected: false, platformTooltip: null, sessionParams: null }),
+  reset: () => set({ state: null, token: null, sessionId: null, connected: false, platformTooltip: null, platformModal: null, sessionParams: null }),
 }))

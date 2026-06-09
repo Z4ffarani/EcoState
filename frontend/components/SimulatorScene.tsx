@@ -231,6 +231,10 @@ function Platform({ def, vectors, onClick }: {
   const threeColor = useMemo(() => new THREE.Color(color), [color])
   const defColor = useMemo(() => new THREE.Color(def.color), [def.color])
   const setPlatformTooltip = useSimStore((s) => s.setPlatformTooltip)
+  const setPlatformModal = useSimStore((s) => s.setPlatformModal)
+  const isTouchDevice = useMemo(() =>
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  , [])
 
   useFrame(({ clock }) => {
     if (groupRef.current) {
@@ -244,15 +248,23 @@ function Platform({ def, vectors, onClick }: {
     <group ref={groupRef} rotation={[0, -(def.angle * Math.PI / 180), 0]}>
       <mesh
         geometry={getSliceGeo()}
-        onClick={onClick}
+        onClick={() => {
+          if (isTouchDevice) setPlatformModal(def.id)
+          onClick()
+        }}
         onPointerEnter={(e) => {
+          if (isTouchDevice) return
           e.stopPropagation()
           setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
         }}
         onPointerMove={(e) => {
+          if (isTouchDevice) return
           setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
         }}
-        onPointerLeave={() => setPlatformTooltip(null)}
+        onPointerLeave={() => {
+          if (isTouchDevice) return
+          setPlatformTooltip(null)
+        }}
       >
         <meshStandardMaterial
           color={threeColor}
