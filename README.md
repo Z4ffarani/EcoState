@@ -347,3 +347,21 @@ O plano segue as fases **Contenção → Erradicação → Recuperação → Li�
 [![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
 [![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)](https://railway.app)
+
+---
+
+## Referências
+
+| # | Referência | Aplicação no Projeto |
+|---|---|---|
+| 1 | [NASA — Environmental Control and Life Support System (ECLSS)](https://www.nasa.gov/reference/environmental-control-and-life-support-systems-eclss/) | Modelo de suporte de vida fechado: pressão, oxigênio, CO₂, temperatura e radiação como vetores críticos |
+| 2 | [MELiSSA Foundation — Projeto MELiSSA](https://www.melissafoundation.org/) | Ciclo ecológico fechado para missões de longa duração; base para as interdependências vegetação → fotossíntese → oxigênio |
+| 3 | [Rockström et al. (2009) — *A safe operating space for humanity* — Nature, 461, 472–475](https://www.nature.com/articles/461472a) | Conceito de limites planetários que inspira os limiares críticos dos vetores (thresholds de 25 e 75) |
+| 4 | [PNUD — Relatório de Desenvolvimento Humano (IDH)](https://hdr.undp.org/) | Metodologia de índice composto ponderado usada em `compute_progress` para calcular o progresso do estado |
+| 5 | [Forrester, J. W. (1971) — *World Dynamics* — Wright-Allen Press](https://www.sciencedirect.com/science/article/abs/pii/0016328771900383) | Dinâmica de sistemas com variáveis interdependentes e feedback loops; precursor intelectual da engine de simulação |
+| 6 | [OWASP Top 10](https://owasp.org/www-project-top-ten/) | Base para identificação e documentação das vulnerabilidades de segurança |
+| 7 | [NIST SP 800-61 Rev. 3 — Computer Security Incident Handling Guide](https://csrc.nist.gov/pubs/sp/800/61/r3/final) | Estrutura do plano de resposta a incidentes (Contenção → Erradicação → Recuperação → Lições Aprendidas) |
+| 8 | [ISO/IEC 27001:2022](https://www.iso.org/standard/27001) | Controles do Anexo A mapeados na seção de governança e compliance |
+| 9 | [Lei nº 13.709/2018 — LGPD](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm) | Princípios de finalidade, necessidade e não-permanência aplicados à política de privacidade |
+| 10 | [RFC 7519 — JSON Web Token (JWT)](https://datatracker.ietf.org/doc/html/rfc7519) | Especificação do mecanismo de autenticação stateless por token |
+| 11 | [RFC 6455 — The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455) | Base para a validação do header `Origin` no handshake WebSocket |
