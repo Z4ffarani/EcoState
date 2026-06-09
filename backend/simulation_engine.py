@@ -86,13 +86,26 @@ def _health_score(key: str, value: float) -> float:
     return value / 100.0
 
 
-def compute_progress(vectors: dict) -> float:
+def _snapshot_progress(vectors: dict) -> float:
+    """Weighted health snapshot — used internally to drive accumulation."""
     score = 0.0
     for key, weight in PROGRESS_WEIGHTS.items():
         v = vectors.get(key, {})
         val = v["value"] if isinstance(v, dict) else v.value
         score += _health_score(key, val) * weight
-    return round(score * 100, 1)
+    return score * 100
+
+
+def compute_progress(current: float, vectors: dict) -> float:
+    """Smooth asymmetric accumulation: climbs fast when healthy, falls slowly."""
+    snapshot = _snapshot_progress(vectors)
+    if snapshot >= current:
+        # Advance proportionally to how far above current state we are
+        new = current + (snapshot - current) * 0.15
+    else:
+        # Degrade slowly — bad runs hurt, but don't erase progress instantly
+        new = current + (snapshot - current) * 0.04
+    return round(max(0.0, min(100.0, new)), 1)
 
 
 def apply_interdependencies(v: dict) -> dict:
@@ -229,7 +242,7 @@ def tick(state: GameState) -> GameState:
     state.supply_pool = round(min(SUPPLY_CAP, state.supply_pool + income), 2)
 
     # 10. Progress
-    state.progress = compute_progress(v)
+    state.progress = compute_progress(state.progress, v)
     state.tick += 1
 
     # 10. Win/Lose conditions

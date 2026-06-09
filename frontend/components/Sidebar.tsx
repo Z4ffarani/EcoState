@@ -242,34 +242,31 @@ export default function Sidebar() {
                         </span>
                       </div>
 
-                      {/* Adjustment buttons */}
-                      {showMenu && (
+                      {/* Adjustment buttons — inverse vectors are read-only consequences */}
+                      {showMenu && !isInverse && (
                         <div className="flex items-center gap-1 mt-1 mb-0.5 pl-[94px]">
-                          {isInverse && (
-                            <span className="text-[9px] text-green-400/50 mr-0.5 shrink-0">grátis</span>
-                          )}
-                          {AMOUNTS.map((amt) => (
+                          {vKey === 'temperature' && AMOUNTS.map((amt) => (
                             <button key={`-${amt}`}
-                              onClick={() => adjustResource(vKey, -amt, isInverse ? 0 : amt)}
-                              disabled={gameEnded || (!isInverse && supply < amt)}
+                              onClick={() => adjustResource(vKey, -amt, amt)}
+                              disabled={gameEnded || supply < amt}
                               className="flex-1 text-[10px] py-0.5 rounded border border-red-800/50 text-red-400/60 hover:border-red-500/70 hover:text-red-400 transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
                               -{amt}
                             </button>
                           ))}
                           {AMOUNTS.map((amt) => (
                             <button key={`+${amt}`}
-                              onClick={() => adjustResource(vKey, amt, isInverse ? 0 : amt)}
-                              disabled={gameEnded || (!isInverse && supply < amt)}
-                              title={!isInverse && supply < amt ? `Precisa de ${amt} supply` : undefined}
-                              className={clsx(
-                                'flex-1 text-[10px] py-0.5 rounded border transition-colors disabled:opacity-20 disabled:cursor-not-allowed',
-                                isInverse
-                                  ? 'border-eco-border text-eco-muted hover:border-amber-500/60 hover:text-amber-400'
-                                  : 'border-eco-border text-eco-muted hover:border-eco-accent hover:text-eco-accent'
-                              )}>
+                              onClick={() => adjustResource(vKey, amt, amt)}
+                              disabled={gameEnded || supply < amt}
+                              title={supply < amt ? `Precisa de ${amt} supply` : undefined}
+                              className="flex-1 text-[10px] py-0.5 rounded border border-eco-border text-eco-muted hover:border-eco-accent hover:text-eco-accent transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
                               +{amt}
                             </button>
                           ))}
+                        </div>
+                      )}
+                      {showMenu && isInverse && (
+                        <div className="pl-[94px] mt-1 mb-0.5">
+                          <span className="text-[9px] text-amber-500/50 italic">consequência da simulação</span>
                         </div>
                       )}
                     </div>
@@ -279,7 +276,7 @@ export default function Sidebar() {
             )
           })}
 
-          <div className="h-3" />
+          <div className="h-20 lg:h-3 shrink-0" />
         </div>
       </div>
     </>

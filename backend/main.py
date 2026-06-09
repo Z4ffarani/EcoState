@@ -110,7 +110,13 @@ async def add_resource(action: ResourceAction, session_id: str = Depends(get_ses
     if action.vector not in state.vectors:
         raise HTTPException(status_code=400, detail=f"Unknown vector: {action.vector}")
 
-    cost = 0 if action.vector in INVERSE_VECTORS else abs(action.amount)
+    if action.vector in INVERSE_VECTORS:
+        raise HTTPException(status_code=400, detail="Vector is read-only: controlled by simulation")
+
+    if action.amount < 0 and action.vector != "temperature":
+        raise HTTPException(status_code=400, detail="Vector cannot be manually reduced")
+
+    cost = abs(action.amount)
     if state.supply_pool < cost:
         raise HTTPException(status_code=400, detail="Insufficient supply pool")
 
@@ -209,8 +215,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
                     continue
 
                 state = await load_session(session_id)
-                if state and vector in state.vectors and not state.is_game_over:
-                    cost = 0 if vector in INVERSE_VECTORS else abs(amount)
+                if state and vector in state.vectors and not state.is_game_over \
+                        and vector not in INVERSE_VECTORS \
+                        and (amount > 0 or vector == "temperature"):
+                    cost = abs(amount)
                     if state.supply_pool >= cost:
                         state.supply_pool = round(max(0.0, state.supply_pool - cost), 2)
                         state.vectors[vector].value = round(_clamp(state.vectors[vector].value + amount), 2)
