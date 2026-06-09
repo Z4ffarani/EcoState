@@ -60,7 +60,7 @@ async def create_session(req: CreateSessionRequest) -> GameState:
     from models import VectorState
     vectors = {k: VectorState(**v) for k, v in vectors_raw.items()}
 
-    initial_progress = compute_progress({k: v.model_dump() for k, v in vectors.items()})
+    initial_progress = compute_progress(0.0, {k: v.model_dump() for k, v in vectors.items()})
     state = GameState(
         session_id=session_id,
         vectors=vectors,
