@@ -16,7 +16,7 @@ BASE_VECTORS = {
     "pressure":      {"value": 82.0, "label": "Pressure",     "unit": "%"},
     "light":         {"value": 70.0, "label": "Light",        "unit": "%"},
     "photosynthesis":{"value": 60.0, "label": "Photosynth.",  "unit": "%"},
-    "communication": {"value": 78.0, "label": "Comms",        "unit": "%"},
+    "infrastructure": {"value": 78.0, "label": "Infra",        "unit": "%"},
     "medical":       {"value": 72.0, "label": "Medical",      "unit": "%"},
 }
 
@@ -57,10 +57,10 @@ REGION_MODIFIERS: dict[str, dict] = {
         "name": "Ocean",
         "emoji": "🌊",
         "base": {
-            "water": +35, "pressure": -12, "communication": -20,
+            "water": +35, "pressure": -12, "infrastructure": -20,
             "humidity": +35, "food": +10,
         },
-        "decay": {"communication": +0.2},
+        "decay": {"infrastructure": +0.2},
         "space": False,
     },
     RegionType.MOON: {
@@ -68,7 +68,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "emoji": "🌕",
         "base": {
             "water": -65, "pressure": -75, "radiation": +50,
-            "communication": -25, "oxygen": -45, "light": +15,
+            "infrastructure": -25, "oxygen": -45, "light": +15,
             "temperature": -30,
         },
         "decay": {"oxygen": +0.8, "water": +0.8, "pressure": +0.4},
@@ -80,7 +80,7 @@ REGION_MODIFIERS: dict[str, dict] = {
         "base": {
             "water": -60, "pressure": -80, "radiation": +45,
             "temperature": -55, "co2": +50, "oxygen": -55,
-            "communication": -40, "food": -30,
+            "infrastructure": -40, "food": -30,
         },
         "decay": {"oxygen": +1.2, "water": +0.9, "pressure": +0.6, "co2": +0.5},
         "space": True,

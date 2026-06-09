@@ -27,7 +27,7 @@ BASE_DECAY: dict[str, float] = {
     "pressure":       0.0,
     "light":          0.0,
     "photosynthesis": 0.0,   # fully derived
-    "communication":  0.1,
+    "infrastructure":  0.1,
     "medical":        0.2,
 }
 
@@ -35,12 +35,12 @@ BASE_DECAY: dict[str, float] = {
 CRITICAL_THRESHOLD = 25.0
 
 # Supply pool: base income per tick + bonuses for maintaining key vectors
-SUPPLY_BASE: float = 3.0
-SUPPLY_CAP: float = 300.0
+SUPPLY_BASE: float = 8.0
+SUPPLY_CAP: float = 100.0
 SUPPLY_BONUSES: list[tuple[str, float, float]] = [
     # (vector, threshold, bonus/tick)
     ("energy",        75.0, 1.5),  # surplus energy powers logistics
-    ("communication", 70.0, 1.0),  # comms network improves supply chains
+    ("infrastructure", 70.0, 1.0),  # infrastructure network improves supply chains
     ("medical",       65.0, 0.8),  # healthy crew works better
     ("vegetation",    60.0, 0.5),  # local production reduces import costs
 ]
@@ -53,7 +53,7 @@ PLATFORM_GROUPS = {
     "power":  ["energy", "light"],
     "atmo":   ["oxygen", "co2", "pressure"],
     "health": ["health", "medical", "radiation", "temperature"],
-    "tech":   ["communication", "waste"],
+    "tech":   ["infrastructure", "waste"],
 }
 
 # Progress weight per vector (weights sum to 1.0)
@@ -67,7 +67,7 @@ PROGRESS_WEIGHTS: dict[str, float] = {
     "radiation":     0.08,
     "co2":           0.07,
     "temperature":   0.06,
-    "communication": 0.04,
+    "infrastructure": 0.04,
     "medical":       0.04,
 }
 
@@ -134,7 +134,7 @@ def apply_interdependencies(v: dict) -> dict:
     # Energy ↓ → Communication, Light, Medical degrade
     if v["energy"]["value"] < 30:
         deficit = (30 - v["energy"]["value"]) / 30
-        v["communication"]["value"] -= 4 * deficit
+        v["infrastructure"]["value"] -= 4 * deficit
         v["light"]["value"] -= 5 * deficit
         v["medical"]["value"] -= 2 * deficit
 
@@ -177,6 +177,19 @@ def apply_interdependencies(v: dict) -> dict:
     # Vegetation → partial food replenishment
     if v["vegetation"]["value"] > 50:
         v["food"]["value"] += (v["vegetation"]["value"] - 50) * 0.01
+
+    # Photosynthesis absorbs CO₂ (plants fix carbon)
+    if v["photosynthesis"]["value"] > 50:
+        v["co2"]["value"] -= (v["photosynthesis"]["value"] - 50) * 0.05
+
+    # Energy + Communication power recycling systems → reduce waste
+    if v["energy"]["value"] > 50 and v["infrastructure"]["value"] > 50:
+        recycle = (min(v["energy"]["value"], v["infrastructure"]["value"]) - 50) / 50
+        v["waste"]["value"] -= recycle * 1.5
+
+    # Energy powers radiation shielding → reduce radiation accumulation
+    if v["energy"]["value"] > 60:
+        v["radiation"]["value"] -= (v["energy"]["value"] - 60) * 0.03
 
     return v
 

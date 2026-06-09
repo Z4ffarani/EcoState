@@ -2,7 +2,7 @@ export type VectorKey =
   | 'water' | 'energy' | 'vegetation' | 'food'
   | 'oxygen' | 'co2' | 'temperature' | 'humidity'
   | 'waste' | 'health' | 'radiation' | 'pressure'
-  | 'light' | 'photosynthesis' | 'communication' | 'medical'
+  | 'light' | 'photosynthesis' | 'infrastructure' | 'medical'
 
 export interface VectorState {
   value: number
@@ -60,7 +60,7 @@ export const VECTOR_LABELS_PT: Record<VectorKey, string> = {
   pressure:      'Pr. Atmosférica',
   light:         'Luminosidade',
   photosynthesis:'Fotossíntese',
-  communication: 'Comunicação',
+  infrastructure: 'Infraestrutura',
   medical:       'Itens Médicos',
 }
 
@@ -82,7 +82,7 @@ export const PLATFORMS: PlatformDef[] = [
   { id: 'power',  label: 'Energia',    vectors: ['energy', 'light'],                               color: '#eab308', angle: 120 },
   { id: 'atmo',   label: 'Atmosfera',  vectors: ['oxygen', 'co2', 'pressure'],                     color: '#06b6d4', angle: 180 },
   { id: 'health', label: 'Saúde',      vectors: ['health', 'medical', 'radiation', 'temperature'], color: '#ef4444', angle: 240 },
-  { id: 'tech',   label: 'Tecnologia', vectors: ['communication', 'waste'],                        color: '#f97316', angle: 300 },
+  { id: 'tech',   label: 'Tecnologia', vectors: ['infrastructure', 'waste'],                        color: '#f97316', angle: 300 },
 ]
 
 export const REGIONS = [

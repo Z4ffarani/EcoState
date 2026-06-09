@@ -11,7 +11,26 @@ import clsx from 'clsx'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const AMOUNTS = [5, 10, 20]
-const SUPPLY_CAP = 300
+const SUPPLY_CAP = 100
+
+function inverseAdvice(key: string, value: number): string {
+  if (key === 'co2') {
+    if (value > 75) return 'Crítico — aumente vegetação para absorver CO₂'
+    if (value > 55) return 'Mantenha vegetação e fotossíntese elevadas'
+    return 'Estável — fotossíntese absorve naturalmente'
+  }
+  if (key === 'waste') {
+    if (value > 75) return 'Crítico — eleve energia e infraestrutura para reciclagem'
+    if (value > 65) return 'Aumente energia e infraestrutura para processar resíduos'
+    return 'Estável — energia e infraestrutura controlam resíduos'
+  }
+  if (key === 'radiation') {
+    if (value > 75) return 'Crítico — pressão e medicina reduzem exposição'
+    if (value > 50) return 'Mantenha pressão e medicina elevadas'
+    return 'Estável — pressão e medicina controlam exposição'
+  }
+  return 'Consequência da simulação'
+}
 
 export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -158,21 +177,23 @@ export default function Sidebar() {
             <RestartButton label="Reiniciar" />
           </div>
 
-          {/* Supply bar */}
-          <div className="p-3 rounded-md border border-eco-border bg-eco-bg/40 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-eco-muted uppercase tracking-wider">Reserva de Suprimentos</span>
-              <span className={clsx('text-xs font-mono font-bold', supplyColor)}>
-                {Math.floor(supply)} / {SUPPLY_CAP}
-              </span>
+          {/* Supply bar — sticky so it stays visible while scrolling vectors */}
+          <div className="sticky top-0 z-10 -mx-4 px-4 py-2" style={{ background: 'rgba(8, 15, 22, 0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+            <div className="p-3 rounded-md border border-eco-border bg-eco-bg/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-eco-muted uppercase tracking-wider">Reserva de Suprimentos</span>
+                <span className={clsx('text-xs font-mono font-bold', supplyColor)}>
+                  {Math.floor(supply)} / {SUPPLY_CAP}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-eco-border rounded-full overflow-hidden">
+                <div className={clsx('h-full rounded-full transition-all duration-500', supplyBarColor)}
+                  style={{ width: `${supplyPct}%` }} />
+              </div>
+              <p className="text-[10px] text-eco-muted leading-[1.6]">
+                Ajustes custam supply (+5/+10/+20). Temperatura pode ser resfriada. Regenera +8–12/turno.
+              </p>
             </div>
-            <div className="w-full h-1.5 bg-eco-border rounded-full overflow-hidden">
-              <div className={clsx('h-full rounded-full transition-all duration-500', supplyBarColor)}
-                style={{ width: `${supplyPct}%` }} />
-            </div>
-            <p className="text-[10px] text-eco-muted leading-[1.6]">
-              Ações benéficas custam supply (±5/±10/±20). Maliciosos são gratuitos. Regenera +3–7/turno.
-            </p>
           </div>
 
           {/* Region / tick */}
@@ -266,7 +287,12 @@ export default function Sidebar() {
                       )}
                       {showMenu && isInverse && (
                         <div className="pl-[94px] mt-1 mb-0.5">
-                          <span className="text-[9px] text-amber-500/50 italic">consequência da simulação</span>
+                          <span className={clsx(
+                            'text-[9px] italic',
+                            v.critical ? 'text-red-400/80' : v.value > 55 ? 'text-amber-400/70' : 'text-eco-muted/50'
+                          )}>
+                            {inverseAdvice(vKey, v.value)}
+                          </span>
                         </div>
                       )}
                     </div>

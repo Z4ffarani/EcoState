@@ -101,7 +101,7 @@ function HydroPlatformIcon({ color }: { color: THREE.Color }) {
 function PowerPlatformIcon({ color }: { color: THREE.Color }) {
   const ringsRef = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
-    if (ringsRef.current) ringsRef.current.rotation.y = clock.elapsedTime * 0.9
+    if (ringsRef.current) ringsRef.current.rotation.y = clock.elapsedTime * 0.45
   })
   return (
     <group position={[2.4, 0.52, 0]}>
@@ -127,7 +127,7 @@ function PowerPlatformIcon({ color }: { color: THREE.Color }) {
 function AtmoPlatformIcon({ color }: { color: THREE.Color }) {
   const moleculesRef = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
-    if (moleculesRef.current) moleculesRef.current.rotation.y = clock.elapsedTime * 0.6
+    if (moleculesRef.current) moleculesRef.current.rotation.y = clock.elapsedTime * 0.30
   })
   return (
     <group position={[2.4, 0.38, 0]}>
@@ -158,7 +158,7 @@ function AtmoPlatformIcon({ color }: { color: THREE.Color }) {
 function HealthPlatformIcon({ color }: { color: THREE.Color }) {
   const crossRef = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
-    if (crossRef.current) crossRef.current.rotation.y = clock.elapsedTime * 0.38
+    if (crossRef.current) crossRef.current.rotation.y = clock.elapsedTime * 0.19
   })
   return (
     <group ref={crossRef} position={[2.4, 0.56, 0]}>
@@ -635,7 +635,7 @@ export default function SimulatorScene() {
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.2}
         autoRotate
-        autoRotateSpeed={0.4}
+        autoRotateSpeed={0.18}
       />
     </Canvas>
   )
