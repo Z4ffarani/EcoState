@@ -1,29 +1,50 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSimStore } from '@/store/useSimStore'
+import { MAX_LEVEL } from '@/lib/vectors'
 import LoadingOverlay from './LoadingOverlay'
+import ScenarioTimer from './ScenarioTimer'
 import clsx from 'clsx'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-const MILESTONES = [25, 50, 75, 95]
-const MILESTONE_LABELS: Record<number, string> = {
-  25: 'Estável',
-  50: 'Próspero',
-  75: 'Avançado',
-  95: 'Completo',
+function scenarioSeconds(level: number): number {
+  return level <= 2 ? 60 : level <= 5 ? 45 : level <= 8 ? 30 : 20
 }
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function ProgressBar() {
   const state = useSimStore((s) => s.state)
   const token = useSimStore((s) => s.token)
   const reset = useSimStore((s) => s.reset)
+  const paused = useSimStore((s) => s.paused)
+  const sidebarOpen = useSimStore((s) => s.sidebarOpen)
+  const submitVectors = useSimStore((s) => s.submitVectors)
   const [loading, setLoading] = useState(false)
+  const [flashContent, setFlashContent] = useState<{ t: string; c: string } | null>(null)
+  const [flashVisible, setFlashVisible] = useState(false)
+
+  const flashKey = `${state?.last_result}-${state?.level}-${state?.scenario_id}-${state?.aggravation}`
+  useEffect(() => {
+    if (!state?.last_result) return
+    const text =
+      state.last_result === 'success' ? { t: '✓ Equilíbrio alcançado', c: 'text-green-400' } :
+      state.last_result === 'miss'    ? { t: '~ Quase — a crise se intensifica', c: 'text-amber-400' } :
+      state.last_result === 'fail'    ? { t: '✕ Distribuição muito distante — tente novamente', c: 'text-red-400' } :
+      null
+    if (!text) return
+    setFlashContent(text)
+    setFlashVisible(false)
+    const enterTimer = setTimeout(() => setFlashVisible(true), 20)
+    const exitTimer  = setTimeout(() => setFlashVisible(false), 2800)
+    const hideTimer  = setTimeout(() => setFlashContent(null), 3500)
+    return () => { clearTimeout(enterTimer); clearTimeout(exitTimer); clearTimeout(hideTimer) }
+  }, [flashKey])
 
   if (!state) return null
 
-  const progress = state.progress
-  const color = progress > 75 ? '#00c8ff' : progress > 50 ? '#3b82f6' : progress > 25 ? '#f59e0b' : '#ef4444'
+  const level = state.level ?? 0
+  const pct = (level / MAX_LEVEL) * 100
+  const color = pct > 75 ? '#00c8ff' : pct > 50 ? '#3b82f6' : pct > 25 ? '#f59e0b' : '#22c55e'
 
   const handleRestart = async () => {
     setLoading(true)
@@ -36,60 +57,62 @@ export default function ProgressBar() {
     reset()
   }
 
+
   return (
     <>
       {loading && <LoadingOverlay message="Iniciando nova partida..." />}
 
-      <div className="eco-panel absolute bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-[600px] max-w-[calc(100vw-2rem)] px-4 py-3 z-10">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-eco-muted uppercase tracking-widest">Progresso do Estado</span>
-          <span className="text-sm font-bold" style={{ color }}>{progress.toFixed(1)}%</span>
-        </div>
-
-        {/* Barra */}
-        <div className="relative h-3 bg-eco-border rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-1000"
-            style={{ width: `${progress}%`, background: color, boxShadow: `0 0 8px ${color}` }}
+      <div className={clsx(
+        'eco-panel absolute bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-[600px] max-w-[calc(100vw-2rem)] px-4 py-3 z-10',
+        'transition-opacity duration-300',
+        sidebarOpen && 'opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto'
+      )} style={{ background: 'rgba(11, 30, 45, 0.75)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+        {/* Mobile-only scenario countdown */}
+        <div className="lg:hidden mb-2.5">
+          <ScenarioTimer
+            seconds={scenarioSeconds(state.level ?? 0)}
+            resetKey={`${state.scenario_id}-${state.level}-${state.aggravation}`}
+            active={!paused && !state.is_victory && !state.is_game_over}
+            onExpire={submitVectors}
           />
-          {MILESTONES.map((m) => (
-            <div
-              key={m}
-              className="absolute top-0 bottom-0 w-px bg-eco-bg/60"
-              style={{ left: `${m}%` }}
-            />
+        </div>
+
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-eco-muted uppercase tracking-widest">Progresso do Estado</span>
+          <span className="text-sm font-bold" style={{ color }}>Nível {level} / {MAX_LEVEL}</span>
+        </div>
+
+        {/* Segmented level bar */}
+        <div className="flex gap-1">
+          {Array.from({ length: MAX_LEVEL }, (_, i) => (
+            <div key={i} className="flex-1 h-2.5 rounded-full overflow-hidden bg-eco-border">
+              <div
+                className="h-full w-full rounded-full transition-all duration-700"
+                style={{
+                  background: i < level ? color : 'transparent',
+                  boxShadow: i < level ? `0 0 6px ${color}` : 'none',
+                }}
+              />
+            </div>
           ))}
         </div>
 
-        {/* Marcos */}
-        <div className="relative mt-1 h-3">
-          {MILESTONES.map((m) => (
-            <span
-              key={m}
-              className={clsx(
-                'absolute text-[9px] -translate-x-1/2 uppercase',
-                progress >= m ? 'text-eco-accent' : 'text-eco-muted'
+        {/* Flash message — grid-rows animates the height so the bar doesn't snap */}
+        {!state.is_victory && (
+          <div className={clsx(
+            'grid transition-all duration-500',
+            flashContent && flashVisible ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          )}>
+            <div className="overflow-hidden">
+              {flashContent && (
+                <div className={clsx('mt-2 text-center text-xs font-semibold', flashContent.c)}>
+                  {flashContent.t}
+                </div>
               )}
-              style={{ left: `${m}%` }}
-            >
-              {MILESTONE_LABELS[m]}
-            </span>
-          ))}
-        </div>
-
-        {/* Mensagens de fim de jogo */}
-        {state.is_game_over && (
-          <div className="mt-2 text-center">
-            <div className="text-red-400 text-sm font-bold eco-critical">☠ {state.message}</div>
-            <button
-              onClick={handleRestart}
-              disabled={loading}
-              className="mt-2 px-5 py-1.5 rounded border border-red-500 text-red-400 text-xs font-bold tracking-widest uppercase hover:bg-red-500/20 transition-all disabled:opacity-50"
-            >
-              ↺ Nova Partida
-            </button>
+            </div>
           </div>
         )}
+
         {state.is_victory && (
           <div className="mt-2 text-center">
             <div className="text-eco-accent text-sm font-bold">✦ {state.message}</div>

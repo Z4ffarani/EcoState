@@ -12,52 +12,59 @@ class RegionType(str, Enum):
     MARS = "mars"
 
 
-class SeasonType(str, Enum):
-    SPRING = "spring"
-    SUMMER = "summer"
-    AUTUMN = "autumn"
-    WINTER = "winter"
-
-
 class VectorState(BaseModel):
-    value: float = Field(ge=0, le=100)
+    # Neutral = 0; negative = pushed down, positive = pushed up. Range -50 … +50.
+    value: float = Field(ge=-50, le=50, default=0.0)
     trend: float = 0.0
     critical: bool = False
     label: str = ""
     unit: str = "%"
 
 
-class ActiveEvent(BaseModel):
-    id: str
-    name: str
-    ticks_remaining: int
-    effects: dict[str, float]
-
-
 class GameState(BaseModel):
     session_id: str
-    vectors: dict[str, VectorState]
     region: RegionType
-    season: SeasonType
-    progress: float = Field(ge=0, le=100, default=0.0)
-    tick: int = 0
-    active_events: list[ActiveEvent] = []
     user_name: str = "Astronaut"
-    is_game_over: bool = False
-    is_victory: bool = False
+
+    # Player-controlled vectors (reset to 50 at each scenario).
+    vectors: dict[str, VectorState] = {}
+
+    # Progress is measured in levels, not percentage.
+    level: int = Field(ge=0, le=10, default=0)
+
+    # Current scenario.
+    scenario_index: int = 0
+    scenario_id: str = ""
+    scenario_title: str = ""
+    scenario_text: str = ""
+    scenario_hint: str = ""
+    aggravation: int = 0
+
+    # Distribution points for the current scenario: total pool the player can allocate across vectors.
+    supply_pool: float = Field(ge=0, default=0.0)
+    supply_budget: float = Field(ge=0, default=0.0)
+
+    last_result: Optional[str] = None   # "success" | "miss" | "fail"
     message: Optional[str] = None
-    supply_pool: float = Field(ge=0, le=300, default=80.0)
+    is_victory: bool = False
+    is_game_over: bool = False
+
+    # Hidden target configuration — excluded from client serialization.
+    targets: dict[str, float] = Field(default_factory=dict)
+
+    def client_json(self) -> str:
+        """Serialized state without the hidden targets (safe to send to the client)."""
+        return self.model_dump_json(exclude={"targets"})
 
 
 class CreateSessionRequest(BaseModel):
     user_name: str = Field(default="Astronaut", max_length=32)
     region: RegionType = RegionType.TROPICAL
-    season: SeasonType = SeasonType.SPRING
 
 
-class ResourceAction(BaseModel):
-    vector: str
-    amount: float = Field(ge=-30, le=30)
+class SubmitRequest(BaseModel):
+    # Final distribution chosen by the player (adjustments happen client-side).
+    vectors: dict[str, float] = {}
 
 
 class UpdateProfileRequest(BaseModel):

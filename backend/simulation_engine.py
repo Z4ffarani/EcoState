@@ -1,286 +1,274 @@
 """
-Tick-based simulation engine for EcoState.
-All vector values live on a 0-100 scale.
-Vectors tagged as 'inverse' are better when LOW (co2, waste, radiation).
+Scenario-based engine for EcoState.
+
+No real-time tick loop. The game advances only when the player submits.
+
+All vectors start neutral (0) regardless of environment. The player reads the
+scenario narrative, allocates a fixed pool of distribution points across vectors,
+and submits before the timer expires. Results:
+
+  success — avg distance ≤ SUCCESS_AVG  AND  all strict_keys satisfied
+  miss    — not success AND avg ≤ MISS_AVG
+  fail    — avg > MISS_AVG
+
+Difficulty comes from three sources:
+  - Time: shorter countdown at higher tiers and on retry (aggravation)
+  - Precision: tighter strict_key thresholds in harder scenarios
+  - Points: distribution pool is exactly what the scenario demands (no slack)
+
+After MAX_AGGRAVATION consecutive non-successes on the same scenario → game over.
+
+Scenario tier by level (0→9):
+  level  0- 2 → Tier 1 (single vector)
+  level  3- 5 → Tier 2 (two vectors)
+  level  6- 8 → Tier 3 (three vectors)
+  level     9 → Tier 4 (four+ vectors, boss round)
+  level    10 → MAX_LEVEL → victory
 """
-from copy import deepcopy
-from models import GameState, RegionType, SeasonType, ActiveEvent
-from regions import REGION_MODIFIERS
-from events import roll_events, tick_events
+import math
+import random
+from models import GameState, VectorState
+from scenarios import (
+    ADJUSTABLE_VECTORS, SPACE_ONLY_VECTORS, OCEAN_ONLY_VECTORS, RESET_VALUE,
+    VECTOR_LABELS, SCENARIOS,
+)
 
-# Which vectors are better when LOW
-INVERSE_VECTORS = {"co2", "waste", "radiation"}
+MAX_LEVEL = 10
+MAX_AGGRAVATION = 2   # aggravates up to twice; 3rd failure → game over
 
-# Natural decay/consumption per tick (positive = decreases value for normal, increases for inverse)
-BASE_DECAY: dict[str, float] = {
-    "water":          1.0,
-    "energy":         1.2,
-    "vegetation":     0.4,
-    "food":           0.7,
-    "oxygen":         0.3,
-    "co2":            0.5,   # CO2 accumulates naturally
-    "temperature":    0.0,
-    "water_quality":  0.3,   # quality degrades without treatment
-    "waste":          0.8,   # waste accumulates naturally
-    "health":         0.15,
-    "radiation":      0.0,
-    "pressure":       0.0,
-    "light":          0.0,
-    "biodiversity":   0.0,   # fully derived
-    "infrastructure":  0.1,
-    "medical":        0.2,
-}
+SUCCESS_AVG = 5.0     # average distance ≤ this → success (subject to strict_keys)
+MISS_AVG = 12.0       # average distance ≤ this → miss; above → fail
 
-# Critical thresholds (below = critical for normal, above = critical for inverse)
-CRITICAL_THRESHOLD = 25.0
+MIN_SUPPLY = 25.0     # minimum supply regardless of targets
 
-# Supply pool: base income per tick + bonuses for maintaining key vectors
-SUPPLY_BASE: float = 8.0
-SUPPLY_CAP: float = 100.0
-SUPPLY_BONUSES: list[tuple[str, float, float]] = [
-    # (vector, threshold, bonus/tick)
-    ("energy",        75.0, 1.5),  # surplus energy powers logistics
-    ("infrastructure", 70.0, 1.0),  # infrastructure network improves supply chains
-    ("medical",       65.0, 0.8),  # healthy crew works better
-    ("vegetation",    60.0, 0.5),  # local production reduces import costs
-]
-INVERSE_CRITICAL_THRESHOLD = 75.0
 
-# Platform groupings for frontend
-PLATFORM_GROUPS = {
-    "bio":    ["vegetation", "food", "biodiversity"],
-    "hydro":  ["water", "water_quality"],
-    "power":  ["energy", "light"],
-    "atmo":   ["oxygen", "co2", "pressure", "temperature"],
-    "health": ["health", "medical", "radiation"],
-    "tech":   ["infrastructure", "waste"],
-}
-
-# Progress weight per vector (weights sum to 1.0)
-PROGRESS_WEIGHTS: dict[str, float] = {
-    "health":        0.18,
-    "oxygen":        0.13,
-    "water":         0.12,
-    "food":          0.10,
-    "energy":        0.10,
-    "pressure":      0.08,
-    "radiation":     0.08,
-    "co2":           0.07,
-    "temperature":   0.06,
-    "infrastructure": 0.04,
-    "medical":       0.04,
-}
-
+# ── Region helpers ────────────────────────────────────────────────────────────
 
 def _clamp(v: float) -> float:
-    return max(0.0, min(100.0, v))
+    return max(-50.0, min(50.0, v))
 
 
-def _health_score(key: str, value: float) -> float:
-    """Returns 0-1 score where 1 = perfect."""
-    if key in INVERSE_VECTORS:
-        return 1.0 - value / 100.0
-    if key == "temperature":
-        # optimal at 50 (normalized), degradation increases away from center
-        return max(0.0, 1.0 - abs(value - 50) / 50)
-    return value / 100.0
+def is_space_region(region) -> bool:
+    from regions import REGION_MODIFIERS
+    return bool(REGION_MODIFIERS.get(region, {}).get("space", False))
 
 
-def _snapshot_progress(vectors: dict) -> float:
-    """Weighted health snapshot — used internally to drive accumulation."""
-    score = 0.0
-    for key, weight in PROGRESS_WEIGHTS.items():
-        v = vectors.get(key, {})
-        val = v["value"] if isinstance(v, dict) else v.value
-        score += _health_score(key, val) * weight
-    return score * 100
+def region_vectors(region) -> list[str]:
+    """Adjustable vectors available in this region."""
+    space = is_space_region(region)
+    ocean = _region_id(region) == "ocean"
+    return [
+        v for v in ADJUSTABLE_VECTORS
+        if (space or v not in SPACE_ONLY_VECTORS)
+        and (ocean or v not in OCEAN_ONLY_VECTORS)
+    ]
 
 
-def compute_progress(current: float, vectors: dict) -> float:
-    """Smooth asymmetric accumulation: climbs fast when healthy, falls slowly."""
-    snapshot = _snapshot_progress(vectors)
-    if snapshot >= current:
-        # Advance proportionally to how far above current state we are
-        new = current + (snapshot - current) * 0.15
-    else:
-        # Degrade slowly — bad runs hurt, but don't erase progress instantly
-        new = current + (snapshot - current) * 0.04
-    return round(max(0.0, min(100.0, new)), 1)
+# ── Scenario pool helpers ─────────────────────────────────────────────────────
+
+def _region_id(region) -> str:
+    """String ID of a region (handles both RegionType enum and raw string)."""
+    return region.value if hasattr(region, "value") else str(region)
 
 
-def apply_interdependencies(v: dict) -> dict:
-    """Cascade effects between vectors."""
-    # Water → Vegetation decay accelerates
-    if v["water"]["value"] < 30:
-        deficit = (30 - v["water"]["value"]) / 30
-        v["vegetation"]["value"] -= 3 * deficit
-        v["food"]["value"] -= 1.5 * deficit
+def valid_scenarios_by_tier(region) -> dict[int, list[dict]]:
+    """
+    Returns {tier: [scenario, …]} for all scenarios valid in this region.
 
-    # Waste ↑ → Water Quality ↓ (contamination)
-    if v["waste"]["value"] > 50:
-        excess = (v["waste"]["value"] - 50) / 50
-        v["water_quality"]["value"] -= excess * 2.5
+    A scenario is excluded when:
+      - Its explicit `regions` list doesn't include this region, OR
+      - All its targets use vectors unavailable in this region
+        (e.g. space-only or ocean-only targets in a non-matching region).
+    """
+    rid = _region_id(region)
+    is_space = is_space_region(region)
+    is_ocean = rid == "ocean"
+    result: dict[int, list[dict]] = {}
 
-    # Water Quality ↓ → Vegetation, Health (contaminated water)
-    if v["water_quality"]["value"] < 40:
-        deficit = (40 - v["water_quality"]["value"]) / 40
-        v["vegetation"]["value"] -= 1.5 * deficit
-        v["health"]["value"] -= 1.5 * deficit
-
-    # Vegetation + Water Quality + Temperature + Light → Biodiversity (derived)
-    temp_score = max(0.0, 100.0 - abs(v["temperature"]["value"] - 50) * 2)
-    bio = (v["vegetation"]["value"] * 0.40 + v["water_quality"]["value"] * 0.30
-           + temp_score * 0.20 + v["light"]["value"] * 0.10)
-    bio = _clamp(bio * 0.95)
-    prev = v["biodiversity"]["value"]
-    v["biodiversity"]["value"] = round((prev * 0.6 + bio * 0.4), 2)
-
-    # Biodiversity → Oxygen (ecosystems produce O₂)
-    if v["biodiversity"]["value"] < 40:
-        deficit = (40 - v["biodiversity"]["value"]) / 40
-        v["oxygen"]["value"] -= 2.5 * deficit
-
-    # CO2 ↑ → Oxygen ↓
-    if v["co2"]["value"] > 55:
-        v["oxygen"]["value"] -= (v["co2"]["value"] - 55) * 0.04
-
-    # Energy ↓ → Infrastructure, Light, Medical degrade
-    if v["energy"]["value"] < 30:
-        deficit = (30 - v["energy"]["value"]) / 30
-        v["infrastructure"]["value"] -= 4 * deficit
-        v["light"]["value"] -= 5 * deficit
-        v["medical"]["value"] -= 2 * deficit
-
-    # Radiation ↑ → Health ↓
-    if v["radiation"]["value"] > 50:
-        v["health"]["value"] -= (v["radiation"]["value"] - 50) * 0.06
-
-    # Temperature extreme → Health, Vegetation
-    temp_dist = abs(v["temperature"]["value"] - 50) / 50
-    if temp_dist > 0.5:
-        v["health"]["value"] -= temp_dist * 2
-        v["vegetation"]["value"] -= temp_dist * 1.5
-
-    # Waste ↑ → Health (direct, beyond water quality effect)
-    if v["waste"]["value"] > 65:
-        excess = (v["waste"]["value"] - 65) / 35
-        v["health"]["value"] -= excess * 2.0
-
-    # Pressure ↓ → Health, Oxygen
-    if v["pressure"]["value"] < 35:
-        deficit = (35 - v["pressure"]["value"]) / 35
-        v["health"]["value"] -= 4 * deficit
-        v["oxygen"]["value"] -= 2 * deficit
-
-    # Oxygen ↓ → Health
-    if v["oxygen"]["value"] < 40:
-        deficit = (40 - v["oxygen"]["value"]) / 40
-        v["health"]["value"] -= 4 * deficit
-
-    # Medical ↑ → partial health recovery
-    if v["medical"]["value"] > 60 and v["health"]["value"] < 95:
-        v["health"]["value"] += (v["medical"]["value"] - 60) * 0.02
-
-    # Food ↓ → Health
-    if v["food"]["value"] < 25:
-        deficit = (25 - v["food"]["value"]) / 25
-        v["health"]["value"] -= 2.5 * deficit
-
-    # Vegetation → partial food replenishment
-    if v["vegetation"]["value"] > 50:
-        v["food"]["value"] += (v["vegetation"]["value"] - 50) * 0.01
-
-    # Biodiversity absorbs CO₂ (ecosystem fixes carbon)
-    if v["biodiversity"]["value"] > 50:
-        v["co2"]["value"] -= (v["biodiversity"]["value"] - 50) * 0.05
-
-    # Biodiversity supports food diversity
-    if v["biodiversity"]["value"] > 60:
-        v["food"]["value"] += (v["biodiversity"]["value"] - 60) * 0.015
-
-    # Energy + Communication power recycling systems → reduce waste
-    if v["energy"]["value"] > 50 and v["infrastructure"]["value"] > 50:
-        recycle = (min(v["energy"]["value"], v["infrastructure"]["value"]) - 50) / 50
-        v["waste"]["value"] -= recycle * 1.5
-
-    # Energy powers radiation shielding → reduce radiation accumulation
-    if v["energy"]["value"] > 60:
-        v["radiation"]["value"] -= (v["energy"]["value"] - 60) * 0.03
-
-    return v
-
-
-def tick(state: GameState) -> GameState:
-    state = deepcopy(state)
-    v = {k: s.model_dump() for k, s in state.vectors.items()}
-
-    # Get region-specific decay overrides
-    region_cfg = REGION_MODIFIERS.get(state.region, {})
-    extra_decay: dict[str, float] = region_cfg.get("decay", {})
-
-    # 1. Apply natural decay
-    for key, decay in BASE_DECAY.items():
-        if key not in v:
+    for s in SCENARIOS:
+        allowed = s.get("regions")
+        if allowed is not None and rid not in allowed:
             continue
-        d = decay + extra_decay.get(key, 0)
-        if key in INVERSE_VECTORS:
-            v[key]["value"] += d      # inverse: accumulates
+        # Require at least one active target after filtering environment-only vectors.
+        effective = {
+            k: v for k, v in s["targets"].items()
+            if (is_space or k not in SPACE_ONLY_VECTORS)
+            and (is_ocean or k not in OCEAN_ONLY_VECTORS)
+        }
+        if not effective:
+            continue
+        tier = s.get("tier", 1)
+        result.setdefault(tier, []).append(s)
+
+    return result
+
+
+def scenario_tier_for_level(level: int) -> int:
+    if level <= 2:  return 1
+    if level <= 5:  return 2
+    if level <= 8:  return 3
+    return 4
+
+
+
+def pick_scenario_for_level(level: int, region, exclude_id: str = "") -> dict:
+    """
+    Random scenario selection within the appropriate tier for this level.
+    Avoids immediately repeating `exclude_id` (prevents same scenario back-to-back).
+    Falls back to the excluded scenario only when it's the only option.
+    """
+    pools = valid_scenarios_by_tier(region)
+    tier = scenario_tier_for_level(level)
+
+    pool = pools.get(tier, [])
+    if not pool:
+        pool = [s for t in sorted(pools) for s in pools[t]]
+    if not pool:
+        pool = [SCENARIOS[0]]
+
+    candidates = [s for s in pool if s["id"] != exclude_id]
+    if not candidates:
+        candidates = pool
+    return random.choice(candidates)
+
+
+# ── Target / supply computation ───────────────────────────────────────────────
+
+def compute_targets(scenario: dict, region) -> dict[str, float]:
+    """Base targets for the region's vectors. Targets never change between retries."""
+    base = scenario.get("targets", {})
+    return {v: float(base.get(v, RESET_VALUE)) for v in region_vectors(region)}
+
+
+def supply_budget(targets: dict[str, float]) -> float:
+    """Exact sum of active targets, always a multiple of 5 (matches ±5/10/20 button steps)."""
+    total = sum(abs(t - RESET_VALUE) for t in targets.values())
+    raw = max(MIN_SUPPLY, total)
+    return float(math.ceil(raw / 5) * 5)
+
+
+# ── Evaluation helpers ────────────────────────────────────────────────────────
+
+def average_distance(vectors: dict[str, VectorState], targets: dict[str, float]) -> float:
+    # Only evaluate vectors that have a non-neutral target (the scenario's actual demands).
+    # Averaging over neutral-target vectors dilutes difficulty of single-vector scenarios.
+    active = [k for k in targets if abs(targets[k] - RESET_VALUE) > 0.1]
+    if not active:
+        return 0.0
+    total = sum(abs(vectors[k].value - targets[k]) for k in active if k in vectors)
+    return total / len(active)
+
+
+def check_strict_keys(
+    vectors: dict[str, VectorState],
+    targets: dict[str, float],
+    strict_keys: dict[str, float],
+) -> bool:
+    """
+    Returns True only when every strict-key vector is within its individual
+    max-distance threshold.  A failed strict key means the submission cannot
+    be rated SUCCESS even if the global average is fine.
+    """
+    for key, threshold in strict_keys.items():
+        if key in vectors and key in targets:
+            if abs(vectors[key].value - targets[key]) > threshold:
+                return False
+    return True
+
+
+# ── Vector state factory ──────────────────────────────────────────────────────
+
+def fresh_vectors(region) -> dict[str, VectorState]:
+    """All region-available vectors reset to the neutral baseline (50)."""
+    return {
+        v: VectorState(
+            value=RESET_VALUE, trend=0.0, critical=False,
+            label=VECTOR_LABELS.get(v, v), unit="%",
+        )
+        for v in region_vectors(region)
+    }
+
+
+# ── Scenario loading ──────────────────────────────────────────────────────────
+
+def scenario_text(scenario: dict, aggravation: int) -> str:
+    base = scenario["narrative"]
+    if aggravation == 0:
+        return base
+    if aggravation == 1:
+        return "⚠ A situação se agrava — tente novamente. " + base
+    return "⚠ Crise crítica. " + base + " O tempo está se esgotando."
+
+
+def _apply_scenario(state: GameState, scenario: dict, aggravation: int) -> None:
+    """Mutate state to reflect the chosen scenario at the given aggravation level."""
+    state.scenario_id    = scenario["id"]
+    state.scenario_title = scenario["title"]
+    state.scenario_index = state.level          # shown in UI as "Cenário #N"
+    state.aggravation    = aggravation
+    state.scenario_text  = scenario_text(scenario, aggravation)
+    state.scenario_hint  = scenario.get("dica", "") if aggravation > 0 else ""
+    state.vectors        = fresh_vectors(state.region)
+    state.targets        = compute_targets(scenario, state.region)
+    state.supply_budget  = supply_budget(state.targets)
+    state.supply_pool    = state.supply_budget
+
+
+def load_scenario(state: GameState, level: int, aggravation: int) -> GameState:
+    """Pick and load a new scenario appropriate for this level."""
+    _apply_scenario(state, pick_scenario_for_level(level, state.region, exclude_id=state.scenario_id), aggravation)
+    return state
+
+
+def reload_scenario(state: GameState, aggravation: int) -> GameState:
+    """Reload the current scenario (same id) at a higher aggravation."""
+    scenario = next((s for s in SCENARIOS if s["id"] == state.scenario_id), None)
+    if scenario is None:
+        scenario = pick_scenario_for_level(state.level, state.region)
+    _apply_scenario(state, scenario, aggravation)
+    return state
+
+
+# ── Main evaluation ───────────────────────────────────────────────────────────
+
+def evaluate_submission(state: GameState) -> GameState:
+    """Score the player's distribution and advance, hold, or collapse."""
+    avg = average_distance(state.vectors, state.targets)
+
+    scenario = next((s for s in SCENARIOS if s["id"] == state.scenario_id), {})
+    strict_keys = scenario.get("strict_keys", {})
+    strict_ok = check_strict_keys(state.vectors, state.targets, strict_keys)
+
+    if avg <= SUCCESS_AVG and strict_ok:
+        # ── SUCCESS ────────────────────────────────────────────────
+        state.level = min(MAX_LEVEL, state.level + 1)
+        state.last_result = "success"
+        if state.level >= MAX_LEVEL:
+            state.is_victory = True
+            state.message = "Estado plenamente equilibrado. O ecossistema prospera."
+            return state
+        state.message = "Padrão alcançado! O estado avança para um novo desafio."
+        load_scenario(state, state.level, 0)
+
+    else:
+        # ── MISS or FAIL ───────────────────────────────────────────
+        if avg <= MISS_AVG:
+            state.last_result = "miss"
+            state.message = (
+                "Quase lá — mas um vetor crítico ficou fora do alvo. A crise se intensifica."
+                if not strict_ok else
+                "Quase lá, mas o equilíbrio escapou. A crise se intensifica."
+            )
         else:
-            v[key]["value"] -= d      # normal: depletes
+            state.last_result = "fail"
+            state.message = "Distribuição muito distante do necessário. Tente novamente."
 
-    # 2. Roll new events
-    active_ids = {e.id for e in state.active_events}
-    new_events = roll_events(state.region.value, active_ids)
-    state.active_events.extend(new_events)
+        next_agg = state.aggravation + 1
+        if next_agg > MAX_AGGRAVATION:
+            state.is_game_over = True
+            state.message = "O estado entrou em colapso. A crise foi além do controle."
+            return state
 
-    # 3. Apply ongoing event effects
-    state.active_events, event_deltas = tick_events(state.active_events)
-    for key, delta in event_deltas.items():
-        if key in v:
-            v[key]["value"] += delta
-
-    # 4. Cascade interdependencies
-    v = apply_interdependencies(v)
-
-    # 5. Clamp all values
-    for key in v:
-        v[key]["value"] = round(_clamp(v[key]["value"]), 2)
-
-    # 6. Mark critical vectors
-    for key in v:
-        val = v[key]["value"]
-        if key in INVERSE_VECTORS:
-            v[key]["critical"] = val > INVERSE_CRITICAL_THRESHOLD
-        else:
-            v[key]["critical"] = val < CRITICAL_THRESHOLD
-
-    # 7. Compute trends (delta vs previous tick)
-    for key in v:
-        prev = state.vectors[key].value if key in state.vectors else 50.0
-        v[key]["trend"] = round(v[key]["value"] - prev, 2)
-
-    # 8. Rebuild vector models
-    from models import VectorState
-    state.vectors = {k: VectorState(**vd) for k, vd in v.items()}
-
-    # 9. Supply income — grows when key vectors are healthy
-    income = SUPPLY_BASE
-    for key, threshold, bonus in SUPPLY_BONUSES:
-        if state.vectors[key].value > threshold:
-            income += bonus
-    state.supply_pool = round(min(SUPPLY_CAP, state.supply_pool + income), 2)
-
-    # 10. Progress
-    state.progress = compute_progress(state.progress, v)
-    state.tick += 1
-
-    # 10. Win/Lose conditions
-    if state.vectors["health"].value <= 0:
-        state.is_game_over = True
-        state.message = "Falha crítica — suporte de vida colapsou."
-
-    if state.progress >= 95 and state.tick >= 60:
-        state.is_victory = True
-        state.message = "Estação plenamente estabelecida. Um salto para a humanidade."
+        reload_scenario(state, next_agg)
 
     return state

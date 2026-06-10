@@ -19,9 +19,9 @@ export default function VictoryModal() {
   const particles = useMemo<Particle[]>(() =>
     Array.from({ length: COUNT }, (_, i) => ({
       id: i,
-      x: ((i * 1.1) % 100),
+      x: (i * 11 + 0.5) % 100,
       color: COLORS[i % COLORS.length],
-      delay: `${((i * 0.023) % 2).toFixed(2)}s`,
+      delay: `${(((i * 17) % COUNT) / COUNT * 2.5).toFixed(2)}s`,
       duration: `${(2.5 + (i % 7) * 0.25).toFixed(2)}s`,
       size: 6 + (i % 5) * 2,
     }))

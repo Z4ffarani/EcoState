@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useCallback } from 'react'
+import { flushSync } from 'react-dom'
 import { useSimStore } from '@/store/useSimStore'
 import { GameState } from '@/lib/vectors'
 
@@ -20,7 +21,10 @@ export function useWebSocket() {
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as GameState
-        if (data.session_id) setState(data)
+        if (!data.session_id) return
+        // Skip WS tick while a manual action is in-flight to avoid flashing old values
+        if (useSimStore.getState().updating) return
+        flushSync(() => setState(data))
       } catch {
         // ignore malformed messages
       }

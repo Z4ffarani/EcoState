@@ -1,62 +1,28 @@
-import asyncio
 import json
 import os
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status, Depends
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from models import CreateSessionRequest, ResourceAction, UpdateProfileRequest, WSMessage
+from models import CreateSessionRequest, SubmitRequest, UpdateProfileRequest, WSMessage
 from session_manager import create_session, load_session, save_session, delete_session, get_platform_groups
-from simulation_engine import tick, _clamp
+from simulation_engine import _clamp, evaluate_submission, region_vectors
 from security import (
     create_token, decode_token,
     validate_ws_origin, check_rate_limit, cleanup_rate_limit,
     ALLOWED_ORIGINS,
 )
 
-# Vectors where higher = worse — managing them never costs supply
-INVERSE_VECTORS: set[str] = {'co2', 'waste', 'radiation'}
-
-# Active WebSocket connections: session_id → websocket
+# Active WebSocket connections: session_id -> websocket (used to push live state).
 _connections: dict[str, WebSocket] = {}
-_sim_tasks: dict[str, asyncio.Task] = {}
-
-TICK_INTERVAL = 5  # seconds
 
 
-async def _simulation_loop(session_id: str) -> None:
-    """Background task: tick the simulation every TICK_INTERVAL seconds."""
-    while True:
-        await asyncio.sleep(TICK_INTERVAL)
-        state = await load_session(session_id)
-        if state is None:
-            break
-        if state.is_game_over or state.is_victory:
-            ws = _connections.get(session_id)
-            if ws:
-                await ws.send_text(state.model_dump_json())
-            break
-        state = tick(state)
-        await save_session(state)
-        ws = _connections.get(session_id)
-        if ws:
-            try:
-                await ws.send_text(state.model_dump_json())
-            except Exception:
-                break
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
-    # Cancel all sim tasks on shutdown
-    for task in _sim_tasks.values():
-        task.cancel()
-
-
-app = FastAPI(title="EcoState API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="EcoState API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +37,21 @@ bearer = HTTPBearer()
 
 def get_session_id(credentials: HTTPAuthorizationCredentials = Depends(bearer)) -> str:
     return decode_token(credentials.credentials)
+
+
+def _state_response(state) -> Response:
+    """Return the client-safe state (hidden targets stripped) as JSON."""
+    return Response(content=state.client_json(), media_type="application/json")
+
+
+async def _push_state(session_id: str, state) -> None:
+    """Push the client-safe state to the live WebSocket, if connected."""
+    ws = _connections.get(session_id)
+    if ws:
+        try:
+            await ws.send_text(state.client_json())
+        except Exception:
+            pass
 
 
 # ─── REST Endpoints ────────────────────────────────────────────────────────────
@@ -89,7 +70,15 @@ async def platforms():
 async def new_session(req: CreateSessionRequest):
     state = await create_session(req)
     token = create_token(state.session_id)
-    return {"session_id": state.session_id, "token": token, "state": state}
+    return Response(
+        content=json.dumps({
+            "session_id": state.session_id,
+            "token": token,
+            "state": json.loads(state.client_json()),
+        }),
+        media_type="application/json",
+        status_code=201,
+    )
 
 
 @app.get("/session")
@@ -97,42 +86,26 @@ async def get_session(session_id: str = Depends(get_session_id)):
     state = await load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
-    return state
+    return _state_response(state)
 
 
-@app.post("/session/resource")
-async def add_resource(action: ResourceAction, session_id: str = Depends(get_session_id)):
+@app.post("/session/submit")
+async def submit(body: SubmitRequest, session_id: str = Depends(get_session_id)):
     state = await load_session(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
-    if state.is_game_over or state.is_victory:
+    if state.is_victory or state.is_game_over:
         raise HTTPException(status_code=400, detail="Game has ended")
-    if action.vector not in state.vectors:
-        raise HTTPException(status_code=400, detail=f"Unknown vector: {action.vector}")
 
-    if action.vector in INVERSE_VECTORS:
-        raise HTTPException(status_code=400, detail="Vector is read-only: controlled by simulation")
+    # Apply the player's final distribution (adjustments were made client-side).
+    for key in region_vectors(state.region):
+        if key in state.vectors and key in body.vectors:
+            state.vectors[key].value = round(_clamp(body.vectors[key]), 2)
 
-    if action.amount < 0 and action.vector != "temperature":
-        raise HTTPException(status_code=400, detail="Vector cannot be manually reduced")
-
-    cost = abs(action.amount)
-    if state.supply_pool < cost:
-        raise HTTPException(status_code=400, detail="Insufficient supply pool")
-
-    state.supply_pool = round(max(0.0, state.supply_pool - cost), 2)
-    current = state.vectors[action.vector].value
-    state.vectors[action.vector].value = round(_clamp(current + action.amount), 2)
+    evaluate_submission(state)
     await save_session(state)
-
-    # Push updated state to WebSocket
-    ws = _connections.get(session_id)
-    if ws:
-        try:
-            await ws.send_text(state.model_dump_json())
-        except Exception:
-            pass
-    return state
+    await _push_state(session_id, state)
+    return _state_response(state)
 
 
 @app.patch("/session/profile")
@@ -147,9 +120,6 @@ async def update_profile(body: UpdateProfileRequest, session_id: str = Depends(g
 
 @app.delete("/session")
 async def end_session(session_id: str = Depends(get_session_id)):
-    task = _sim_tasks.pop(session_id, None)
-    if task:
-        task.cancel()
     _connections.pop(session_id, None)
     await delete_session(session_id)
     return {"deleted": True}
@@ -159,14 +129,12 @@ async def end_session(session_id: str = Depends(get_session_id)):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = ""):
-    # Security: origin check
     try:
         validate_ws_origin(websocket)
     except HTTPException:
         await websocket.close(code=4003)
         return
 
-    # Security: JWT validation
     try:
         session_id = decode_token(token)
     except HTTPException:
@@ -181,23 +149,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
     await websocket.accept()
     _connections[session_id] = websocket
 
-    # Start simulation loop if not already running
-    if session_id not in _sim_tasks or _sim_tasks[session_id].done():
-        _sim_tasks[session_id] = asyncio.create_task(_simulation_loop(session_id))
-
-    # Send current state immediately
-    await websocket.send_text(state.model_dump_json())
+    # Send current state immediately.
+    await websocket.send_text(state.client_json())
 
     try:
         while True:
             raw = await websocket.receive_text()
 
-            # Rate limiting
             if not check_rate_limit(session_id):
                 await websocket.send_text(json.dumps({"error": "rate_limited"}))
                 continue
 
-            # Validate message schema
             try:
                 msg = WSMessage.model_validate_json(raw)
             except Exception:
@@ -206,24 +168,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
 
             if msg.type == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-
-            elif msg.type == "add_resource":
-                vector = str(msg.payload.get("vector", ""))
-                amount = float(msg.payload.get("amount", 10))
-                amount = max(-30.0, min(30.0, amount))
-                if amount == 0:
-                    continue
-
-                state = await load_session(session_id)
-                if state and vector in state.vectors and not state.is_game_over \
-                        and vector not in INVERSE_VECTORS \
-                        and (amount > 0 or vector == "temperature"):
-                    cost = abs(amount)
-                    if state.supply_pool >= cost:
-                        state.supply_pool = round(max(0.0, state.supply_pool - cost), 2)
-                        state.vectors[vector].value = round(_clamp(state.vectors[vector].value + amount), 2)
-                        await save_session(state)
-                    await websocket.send_text(state.model_dump_json())
 
     except WebSocketDisconnect:
         pass

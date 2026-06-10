@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { REGIONS, SEASONS } from '@/lib/vectors'
+import { REGIONS } from '@/lib/vectors'
 import { useSimStore } from '@/store/useSimStore'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -12,7 +12,6 @@ interface Props {
 export default function SetupScreen({ onStart }: Props) {
   const [name, setName] = useState('Armstrong')
   const [region, setRegion] = useState('tropical')
-  const [season, setSeason] = useState('spring')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const setSessionParams = useSimStore((s) => s.setSessionParams)
@@ -25,11 +24,11 @@ export default function SetupScreen({ onStart }: Props) {
       const res = await fetch(`${API_URL}/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_name: resolvedName, region, season }),
+        body: JSON.stringify({ user_name: resolvedName, region }),
       })
       if (!res.ok) throw new Error('Falha ao criar sessão')
       const data = await res.json()
-      setSessionParams({ name: resolvedName, region, season })
+      setSessionParams({ name: resolvedName, region })
       onStart(data.token, data.session_id)
     } catch {
       setError('Não foi possível conectar ao servidor. O backend está em execução?')
@@ -100,36 +99,6 @@ export default function SetupScreen({ onStart }: Props) {
               ) : null
             })()}
           </div>
-
-          {/* Estado (oculto para regiões espaciais) */}
-          {!['moon', 'mars'].includes(region) && (
-            <div>
-              <label className="text-xs text-eco-muted uppercase tracking-wider mb-1 block">
-                Estado do Ano
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {SEASONS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSeason(s.id)}
-                    className={`py-2 rounded border text-xs transition-all ${
-                      season === s.id
-                        ? 'border-eco-accent text-eco-accent bg-eco-accent/10'
-                        : 'border-eco-border text-eco-muted hover:border-eco-muted'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-              {(() => {
-                const s = SEASONS.find((s) => s.id === season)
-                return s ? (
-                  <p className="mt-2 text-[10px] text-eco-muted/80 leading-relaxed pl-0.5">{s.desc}</p>
-                ) : null
-              })()}
-            </div>
-          )}
 
           {error && <div className="text-xs text-red-400 text-center">{error}</div>}
 

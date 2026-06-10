@@ -1,8 +1,12 @@
+// Player-controlled vectors (reset to 50 at the start of each scenario).
 export type VectorKey =
-  | 'water' | 'energy' | 'vegetation' | 'food'
-  | 'oxygen' | 'co2' | 'temperature' | 'water_quality'
-  | 'waste' | 'health' | 'radiation' | 'pressure'
-  | 'light' | 'biodiversity' | 'infrastructure' | 'medical'
+  | 'hortalicas' | 'solo'
+  | 'quantidade_de_agua' | 'salinidade'
+  | 'energy' | 'radiacao'
+  | 'temperature' | 'co2'
+  | 'oxygen' | 'pressure'
+  | 'medical'
+  | 'infrastructure' | 'residuos'
 
 export interface VectorState {
   value: number
@@ -12,77 +16,88 @@ export interface VectorState {
   unit: string
 }
 
-export interface ActiveEvent {
-  id: string
-  name: string
-  ticks_remaining: number
-  effects: Record<string, number>
-}
-
 export interface GameState {
   session_id: string
-  vectors: Record<VectorKey, VectorState>
   region: string
-  season: string
-  progress: number
-  tick: number
-  active_events: ActiveEvent[]
   user_name: string
-  is_game_over: boolean
-  is_victory: boolean
-  message: string | null
+  vectors: Record<VectorKey, VectorState>
+  level: number
+  scenario_index: number
+  scenario_id: string
+  scenario_title: string
+  scenario_text: string
+  scenario_hint: string
+  aggravation: number
   supply_pool: number
+  supply_budget: number
+  last_result: 'success' | 'miss' | 'fail' | null
+  message: string | null
+  is_victory: boolean
+  is_game_over: boolean
 }
 
-// Vectors that are better when LOW
-export const INVERSE_VECTORS: Set<VectorKey> = new Set(['co2', 'waste', 'radiation'])
+export const MAX_LEVEL = 10
+
+// Rank titles shown below the player's name, indexed by level (0–10).
+export const LEVEL_RANKS: string[] = [
+  'Voluntário',      // 0
+  'Agente',          // 1
+  'Analista',        // 2
+  'Técnico',         // 3
+  'Especialista',    // 4
+  'Engenheiro',      // 5
+  'Coordenador',     // 6
+  'Gestor',          // 7
+  'Diretor',         // 8
+  'Comandante',      // 9
+  'Guardião do Estado', // 10 (victory)
+]
 
 export interface PlatformDef {
   id: string
   label: string
   vectors: VectorKey[]
   color: string
-  angle: number  // degrees, 0 = right, clockwise
+  angle: number
 }
 
 export const VECTOR_LABELS_PT: Record<VectorKey, string> = {
-  water:         'Água',
-  energy:        'Energia',
-  vegetation:    'Vegetação',
-  food:          'Alimentos',
-  oxygen:        'Oxigênio',
-  co2:           'CO₂',
-  temperature:   'Temperatura',
-  water_quality: 'Qual. da Água',
-  waste:         'Resíduos',
-  health:        'Saúde Geral',
-  radiation:     'Radiação',
-  pressure:      'Pr. Atmosférica',
-  light:         'Luminosidade',
-  biodiversity:  'Biodiversidade',
-  infrastructure: 'Infraestrutura',
-  medical:       'Itens Médicos',
+  hortalicas:          'Hortaliças',
+  solo:                'Solo Agrícola',
+  quantidade_de_agua:  'Qtd. de Água',
+  salinidade:          'Salinidade',
+  energy:              'Energia',
+  radiacao:            'Radiação',
+  temperature:         'Temperatura',
+  co2:                 'CO₂',
+  oxygen:              'Oxigênio',
+  pressure:            'Pressão',
+  medical:             'Itens Médicos',
+  infrastructure:      'Infraestrutura',
+  residuos:            'Resíduos',
 }
 
-export const EVENT_NAMES_PT: Record<string, string> = {
-  'Drought':           'Seca',
-  'Solar Storm':       'Tempestade Solar',
-  'Equipment Failure': 'Falha de Equipamento',
-  'Air Leak':          'Vazamento de Ar',
-  'Epidemic':          'Epidemia',
-  'Cold Snap':         'Onda de Frio',
-  'Dust Storm':        'Tempestade de Poeira',
-  'Algae Bloom':       'Floração de Algas',
-  'Waste Overflow':    'Excesso de Resíduos',
-}
+// Vectors that only appear in space regions (Moon, Mars).
+export const SPACE_REGIONS = new Set(['moon', 'mars'])
+export const SPACE_ONLY_VECTORS = new Set<VectorKey>(['oxygen', 'pressure'])
+
+// Vectors that only appear in ocean regions.
+export const OCEAN_REGIONS = new Set(['ocean'])
+export const OCEAN_ONLY_VECTORS = new Set<VectorKey>(['salinidade'])
 
 export const PLATFORMS: PlatformDef[] = [
-  { id: 'bio',    label: 'Biosfera',   vectors: ['vegetation', 'food', 'biodiversity'],              color: '#22c55e', angle: 0   },
-  { id: 'hydro',  label: 'Hidrologia', vectors: ['water', 'water_quality'],                         color: '#3b82f6', angle: 60  },
-  { id: 'power',  label: 'Energia',    vectors: ['energy', 'light'],                                color: '#eab308', angle: 120 },
-  { id: 'atmo',   label: 'Atmosfera',  vectors: ['oxygen', 'co2', 'pressure', 'temperature'],       color: '#06b6d4', angle: 180 },
-  { id: 'health', label: 'Saúde',      vectors: ['health', 'medical', 'radiation'],                 color: '#ef4444', angle: 240 },
-  { id: 'tech',   label: 'Tecnologia', vectors: ['infrastructure', 'waste'],                         color: '#f97316', angle: 300 },
+  // bio: crops + soil
+  { id: 'bio',    label: 'Biosfera',       vectors: ['hortalicas', 'solo'],                             color: '#22c55e', angle: 0   },
+  // hydro: water supply + ocean salinity
+  { id: 'hydro',  label: 'Hidrologia',     vectors: ['quantidade_de_agua', 'salinidade'],                color: '#3b82f6', angle: 60  },
+  // power: energy + nuclear radiation
+  { id: 'power',  label: 'Energia',        vectors: ['energy', 'radiacao'],                             color: '#eab308', angle: 120 },
+  // atmo: atmosphere (oxygen + pressure space-only; co2 + temperature universal)
+  { id: 'atmo',   label: 'Atmosfera',      vectors: ['oxygen', 'temperature', 'pressure', 'co2'],       color: '#06b6d4', angle: 180 },
+  // health: medical supplies
+  { id: 'health', label: 'Saúde',          vectors: ['medical'],                                        color: '#ef4444', angle: 240 },
+  // tech: built infrastructure + waste management
+  { id: 'tech',   label: 'Infraestrutura', vectors: ['infrastructure', 'residuos'],                     color: '#f97316', angle: 300 },
 ]
 
 export const REGIONS = [
@@ -94,35 +109,33 @@ export const REGIONS = [
   { id: 'mars',     label: 'Marte',    emoji: '🔴', desc: 'Atmosfera rarefeita, tempestades de poeira e temperaturas extremas.' },
 ]
 
-export const SEASONS = [
-  { id: 'spring', label: 'Primavera', desc: 'Temperaturas amenas, chuvas moderadas e período de florescimento.' },
-  { id: 'summer', label: 'Verão',     desc: 'Calor intenso, alto consumo de recursos e metabolismo acelerado.' },
-  { id: 'autumn', label: 'Outono',    desc: 'Período de colheita, queda foliar e transição térmica gradual.' },
-  { id: 'winter', label: 'Inverno',   desc: 'Frio prolongado, baixa luz solar e metabolismo reduzido.' },
-]
-
 export const REGION_PT: Record<string, string> = {
   tropical: 'Tropical', desert: 'Deserto', arctic: 'Ártico',
   ocean: 'Oceano', moon: 'Lua', mars: 'Marte',
 }
 
-export const SEASON_PT: Record<string, string> = {
-  spring: 'Primavera', summer: 'Verão', autumn: 'Outono', winter: 'Inverno',
+// Neutral baseline: every vector resets to 0. Range is -50 … +50.
+// Sign = direction (negative = pushed down, positive = pushed up); magnitude = how far.
+export const NEUTRAL = 0
+export const VECTOR_MAX = 50
+
+// Signed display: "+30", "-20", "0".
+export function formatSigned(value: number): string {
+  const r = Math.round(value)
+  return r > 0 ? `+${r}` : `${r}`
 }
 
+// Platform color in 3D is driven by how far the platform's vectors sit from neutral (0).
+// High average deviation = more disturbed (amber / red). All at 0 = fully balanced (green).
 export function getPlatformHealth(platform: PlatformDef, vectors: Record<string, VectorState>): number {
-  const scores = platform.vectors.map((k) => {
-    const v = vectors[k]
-    if (!v) return 1
-    if (INVERSE_VECTORS.has(k as VectorKey)) return 1 - v.value / 100
-    if (k === 'temperature') return Math.max(0, 1 - Math.abs(v.value - 50) / 50)
-    return v.value / 100
-  })
-  return scores.reduce((a, b) => a + b, 0) / scores.length
+  const vecs = platform.vectors.map((k) => vectors[k]).filter(Boolean)
+  if (!vecs.length) return 1
+  const avgDist = vecs.reduce((s, v) => s + Math.abs(v.value - NEUTRAL), 0) / vecs.length
+  return Math.max(0, 1 - avgDist / VECTOR_MAX)
 }
 
 export function healthColor(health: number): string {
-  if (health > 0.65) return '#22c55e'
+  if (health > 0.65) return '#00c8ff'
   if (health > 0.35) return '#f59e0b'
   return '#ef4444'
 }

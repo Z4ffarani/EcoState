@@ -1,299 +1,359 @@
 'use client'
-import { useState } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useSimStore } from '@/store/useSimStore'
 import RestartButton from './RestartButton'
 import ExitButton from './ExitButton'
+import PauseButton from './PauseButton'
+import ScenarioTimer from './ScenarioTimer'
 import {
-  PLATFORMS, INVERSE_VECTORS, VECTOR_LABELS_PT,
-  EVENT_NAMES_PT, REGION_PT, SEASON_PT, trendArrow, VectorKey,
+  PLATFORMS, VECTOR_LABELS_PT,
+  REGION_PT, VectorKey, MAX_LEVEL, LEVEL_RANKS,
+  SPACE_REGIONS, SPACE_ONLY_VECTORS,
+  OCEAN_REGIONS, OCEAN_ONLY_VECTORS,
+  NEUTRAL, VECTOR_MAX, formatSigned,
 } from '@/lib/vectors'
 import clsx from 'clsx'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const AMOUNTS = [5, 10, 20]
-const SUPPLY_CAP = 100
 
-function inverseAdvice(key: string, value: number): string {
-  if (key === 'co2') {
-    if (value > 75) return 'Crítico — aumente vegetação para absorver CO₂'
-    if (value > 55) return 'Mantenha vegetação e fotossíntese elevadas'
-    return 'Estável — fotossíntese absorve naturalmente'
-  }
-  if (key === 'waste') {
-    if (value > 75) return 'Crítico — eleve energia e infraestrutura para reciclagem'
-    if (value > 65) return 'Aumente energia e infraestrutura para processar resíduos'
-    return 'Estável — energia e infraestrutura controlam resíduos'
-  }
-  if (key === 'radiation') {
-    if (value > 75) return 'Crítico — pressão e medicina reduzem exposição'
-    if (value > 50) return 'Mantenha pressão e medicina elevadas'
-    return 'Estável — pressão e medicina controlam exposição'
-  }
-  return 'Consequência da simulação'
+// Timer duration is keyed only to level (progress stage), not aggravation.
+// Aggravation makes the scenario harder but does not change the clock — the
+// clock is only shortened when the player advances to the next level.
+function scenarioSeconds(level: number): number {
+  return level <= 2 ? 60 : level <= 5 ? 45 : level <= 8 ? 30 : 20
 }
 
 export default function Sidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const sidebarOpen = useSimStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useSimStore((s) => s.setSidebarOpen)
+  const [scrolled, setScrolled] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const state = useSimStore((s) => s.state)
   const connected = useSimStore((s) => s.connected)
-  const showMenu = useSimStore((s) => s.showMenu)
-  const toggleMenu = useSimStore((s) => s.toggleMenu)
+  const updating = useSimStore((s) => s.updating)
+  const setUpdating = useSimStore((s) => s.setUpdating)
+  const paused = useSimStore((s) => s.paused)
+  const togglePause = useSimStore((s) => s.togglePause)
+  const vectorsModified = useSimStore((s) => s.vectorsModified)
+  const setVectorsModified = useSimStore((s) => s.setVectorsModified)
   const token = useSimStore((s) => s.token)
   const setState = useSimStore((s) => s.setState)
-  const tick = state?.tick ?? 0
 
-  if (!state) return null
-
-  const supply = state.supply_pool ?? 80
-  const supplyPct = (supply / SUPPLY_CAP) * 100
-  const supplyColor = supply > 60 ? 'text-eco-accent' : supply > 20 ? 'text-amber-400' : 'text-red-400'
-  const supplyBarColor = supply > 60 ? 'bg-eco-accent' : supply > 20 ? 'bg-amber-400' : 'bg-red-500'
-  const gameEnded = !!state.is_game_over || !!state.is_victory
-
-  const adjustResource = async (vector: VectorKey, amount: number, cost: number) => {
-    if (cost > 0 && supply < cost) return
-    if (state) {
-      const current = state.vectors[vector]?.value ?? 0
-      setState({
-        ...state,
-        supply_pool: Math.max(0, supply - cost),
-        vectors: {
-          ...state.vectors,
-          [vector]: { ...state.vectors[vector], value: Math.max(0, Math.min(100, current + amount)) },
-        },
-      })
-    }
+  // Submit sends the final client-side distribution to the server.
+  const submit = useCallback(async () => {
+    const cur = useSimStore.getState().state
+    if (!cur || cur.is_victory || useSimStore.getState().updating) return
+    setUpdating(true)
+    setVectorsModified(false)
     try {
-      const res = await fetch(`${API_URL}/session/resource`, {
+      const payload = {
+        vectors: Object.fromEntries(
+          Object.entries(cur.vectors).map(([k, v]) => [k, v.value])
+        ),
+      }
+      const res = await fetch(`${API_URL}/session/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ vector, amount }),
+        body: JSON.stringify(payload),
       })
       if (res.ok) setState(await res.json())
     } catch { /* noop */ }
+    finally {
+      setUpdating(false)
+    }
+  }, [token, setState, setUpdating])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return
+      const s = useSimStore.getState()
+      if (!s.state) return
+      const ended = !!s.state.is_victory || !!s.state.is_game_over
+      if (!ended && !s.updating && !s.paused) submit()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [submit])
+
+  if (!state) return null
+
+  const budget = state.supply_budget || 1
+  const isSpace = SPACE_REGIONS.has(state.region)
+  const isOcean = OCEAN_REGIONS.has(state.region)
+  const ended = !!state.is_victory || !!state.is_game_over
+  const lockedHard = ended || updating          // truly blocked: can't interact at all
+  const locked = lockedHard || paused           // softly locked: submit + timer frozen
+  const timerSeconds = scenarioSeconds(state.level)
+
+  const spent = Math.round(Object.values(state.vectors).reduce((a, v) => a + Math.abs(v.value - NEUTRAL), 0) / 5) * 5
+  const usedPct = Math.min(100, (spent / budget) * 100)
+
+  // A move is allowed only if it keeps total allocation within the budget.
+  const moveDelta = (vector: VectorKey, amount: number): number | null => {
+    const cur = state.vectors[vector]?.value ?? NEUTRAL
+    const next = Math.max(-VECTOR_MAX, Math.min(VECTOR_MAX, cur + amount))
+    if (next === cur) return null
+    const costDelta = Math.abs(next - NEUTRAL) - Math.abs(cur - NEUTRAL)
+    if (spent + costDelta > budget + 1e-6) return null
+    return next
   }
+
+  // Client-side only — instant, no server round-trip (vectors are static until submit).
+  // Interacting while paused auto-resumes the game.
+  const adjustResource = (vector: VectorKey, amount: number) => {
+    if (lockedHard) return
+    if (paused) togglePause()
+    const next = moveDelta(vector, amount)
+    if (next === null) return
+    setVectorsModified(true)
+    setState({
+      ...state,
+      vectors: { ...state.vectors, [vector]: { ...state.vectors[vector], value: next } },
+    })
+  }
+
+  const transitionKey = `${state.scenario_id}-${state.level}-${state.aggravation}`
+  // Timer resets on every state transition — including aggravation — but duration
+  // stays fixed per level (scenarioSeconds ignores aggravation).
+  const timerKey = transitionKey
 
   return (
     <>
-      {/* ── Mobile hamburger — fixed top-left, hidden on desktop ── */}
+      {/* ── Mobile pull tab — toggles open/close, hidden on desktop ── */}
       <button
         className={clsx(
-          'lg:hidden fixed top-4 left-4 z-50 eco-panel w-9 h-9 flex flex-col items-center justify-center gap-[5px] transition-opacity duration-200',
-          mobileOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          'lg:hidden fixed top-1/2 -translate-y-1/2 z-50',
+          'flex items-center justify-center w-5 h-16',
+          'border border-eco-border transition-all duration-300',
+          sidebarOpen
+            ? 'left-[calc(100vw-2.5rem)] rounded-r-lg border-l-0'
+            : 'left-0 rounded-r-lg border-l-0'
         )}
-        onClick={() => setMobileOpen(true)}
-        aria-label="Abrir painel"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label={sidebarOpen ? 'Fechar painel' : 'Abrir painel'}
+        style={{ background: '#0a1c29' }}
       >
-        <span className="w-[14px] h-[1.5px] bg-eco-accent block" />
-        <span className="w-[14px] h-[1.5px] bg-eco-accent block" />
-        <span className="w-[14px] h-[1.5px] bg-eco-accent block" />
+        <svg width="6" height="10" viewBox="0 0 6 10" fill="none">
+          <path
+            d={sidebarOpen ? 'M5 1L1 5l4 4' : 'M1 1l4 4-4 4'}
+            stroke="#00c8ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+          />
+        </svg>
       </button>
 
-      {/* ── Mobile tap-outside-to-close zone (no darkening) ── */}
+      {/* ── Mobile tap-outside-to-close zone ── */}
       <div
         className={clsx(
           'lg:hidden fixed inset-0 z-40 transition-opacity duration-300',
-          mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         )}
-        onClick={() => setMobileOpen(false)}
+        onClick={() => setSidebarOpen(false)}
       />
 
       {/* ── Sidebar panel ── */}
       <div
         className={clsx(
           'flex flex-col h-screen border-r border-eco-border overflow-hidden transition-transform duration-300',
-          // Mobile: fixed drawer, full-screen width
-          'fixed inset-y-0 left-0 z-50 w-full',
-          // Desktop: relative (in flow), 360px, always visible
-          'lg:relative lg:inset-auto lg:w-[360px] lg:shrink-0 lg:translate-x-0',
-          // Mobile open/close via translate
-          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          'fixed inset-y-0 left-0 z-50 w-[calc(100vw-2.5rem)]',
+          'lg:relative lg:inset-auto lg:w-[432px] lg:shrink-0 lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
-        style={{ background: 'rgba(8, 22, 34, 0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        style={{ background: '#0a1c29' }}
       >
-        {/* ── Header ── */}
-        <div className="relative flex items-center gap-3 px-4 py-3 border-b border-eco-border shrink-0 overflow-hidden">
-          {/* Tick sweep bar — restarts on each tick via key */}
-          {connected && (
-            <div
-              key={tick}
-              className="animate-header-sweep absolute bottom-0 left-0 h-[2px] w-2/5 pointer-events-none"
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.5), #00c8ff, rgba(0,200,255,0.5), transparent)' }}
-            />
-          )}
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-eco-accent font-bold text-xs border border-eco-accent/40 shrink-0"
-            style={{ background: 'rgba(0,200,255,0.08)' }}
-          >
-            {state.user_name.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm text-white font-semibold truncate leading-tight">{state.user_name}</div>
-          </div>
-          {/* Desktop: hamburger toggles resource adjustments */}
-          <button
-            className="hidden lg:flex w-8 h-8 flex-col items-center justify-center gap-[5px] shrink-0 rounded hover:bg-white/5 transition-colors"
-            onClick={toggleMenu}
-            title={showMenu ? 'Monitoramento' : 'Ajustar recursos'}
-          >
-            <span className={clsx('w-[14px] h-[1.5px] bg-eco-accent block transition-all duration-200', showMenu && 'rotate-45 translate-y-[6.5px]')} />
-            <span className={clsx('w-[14px] h-[1.5px] bg-eco-accent block transition-all duration-200', showMenu && 'opacity-0')} />
-            <span className={clsx('w-[14px] h-[1.5px] bg-eco-accent block transition-all duration-200', showMenu && '-rotate-45 -translate-y-[6.5px]')} />
-          </button>
-          {/* Mobile: close button */}
-          <button
-            className="lg:hidden w-8 h-8 flex items-center justify-center text-eco-muted hover:text-white transition-colors shrink-0"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Fechar painel"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-
         {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 lg:pb-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div
+          ref={scrollRef}
+          onScroll={() => setScrolled((scrollRef.current?.scrollTop ?? 0) > 24)}
+          className="flex-1 overflow-y-auto px-4 pb-3 space-y-3 min-h-0 lg:pb-3"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
 
-          {/* Session actions */}
-          <div className="flex gap-2">
-            <ExitButton />
-            <RestartButton label="Reiniciar" />
-          </div>
-
-          {/* Sticky: active events + supply bar */}
-          <div className="sticky top-0 z-10 -mx-4 px-4 pb-2 pt-1" style={{ background: 'rgba(8, 15, 22, 0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-            {state.active_events.length > 0 && (
-              <div className="mb-2 bg-red-900/20 border border-red-700/40 rounded-md px-3 py-2 space-y-1">
-                {state.active_events.map((e) => (
-                  <div key={e.id} className="flex items-start gap-2 text-xs text-red-400 eco-critical">
-                    <span className="shrink-0 mt-[1px]">⚠</span>
-                    <span>
-                      {EVENT_NAMES_PT[e.name] ?? e.name}
-                      <span className="text-red-400/55 ml-1">({e.ticks_remaining} turnos)</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="p-3 rounded-md border border-eco-border bg-eco-bg/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-eco-muted uppercase tracking-wider">Reserva de Suprimentos</span>
-                <span className={clsx('text-xs font-mono font-bold', supplyColor)}>
-                  {Math.floor(supply)} / {SUPPLY_CAP}
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-eco-border rounded-full overflow-hidden">
-                <div className={clsx('h-full rounded-full transition-all duration-500', supplyBarColor)}
-                  style={{ width: `${supplyPct}%` }} />
-              </div>
-              <p className="text-[10px] text-eco-muted leading-[1.6]">
-                Ajustes custam supply (+5/+10/+20). Temperatura pode ser resfriada. Regenera +8–12/turno.
-              </p>
+          {/* ── Header ── */}
+          <div className="relative flex items-center justify-center gap-3 pt-4 pb-3 border-b border-eco-border overflow-hidden">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-eco-accent font-bold text-xs border border-eco-accent/40 shrink-0"
+              style={{ background: 'rgba(0,200,255,0.08)' }}
+            >
+              {state.user_name.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div className="text-sm text-white font-semibold leading-tight">{state.user_name}</div>
+              <div className="text-[10px] text-eco-muted">{LEVEL_RANKS[Math.min(state.level, MAX_LEVEL)]}</div>
             </div>
           </div>
 
-          {/* Region / tick */}
-          <div className="flex items-center justify-between px-0.5 text-[10px] text-eco-muted/70">
-            <span>{REGION_PT[state.region] ?? state.region} · {SEASON_PT[state.season] ?? state.season}</span>
-            <span>turno {state.tick}</span>
+          {/* Session actions — equal width */}
+          <div className="flex gap-2 min-w-0 overflow-hidden">
+            <ExitButton />
+            {!vectorsModified && <PauseButton />}
+            <RestartButton label="Reiniciar" />
           </div>
 
-          {/* ── Vectors grouped by platform ── */}
+          {/* Sticky: loading bar + scenario → submit → supply */}
+          <div className="sticky top-0 z-10 -mx-4 px-4 pb-2 pt-3 -mt-3 space-y-2 overflow-hidden" style={{ background: '#0a1c29' }}>
+            {/* Submit loading bar — appears while API call is in flight, not on scenario change */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] pointer-events-none">
+              <div
+                className={clsx('h-full w-2/5', updating ? 'animate-submit-slide' : 'hidden')}
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(0,200,255,0.5), #00c8ff, rgba(0,200,255,0.5), transparent)' }}
+              />
+            </div>
+            {/* Scenario box + submit + points — collapses while paused */}
+            <div className={clsx(
+              'grid transition-all duration-300',
+              paused ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'
+            )}>
+            <div className="overflow-hidden space-y-2">
+              {/* Scenario box */}
+              <div className="rounded-md border px-3 py-2.5 border-amber-500/40 bg-amber-900/15">
+                <div className={clsx('flex items-center gap-2 transition-all duration-300', scrolled ? 'mb-0' : 'mb-1')}>
+                  <span className="text-amber-400 text-xs shrink-0">◆</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 truncate">
+                    {state.scenario_title}
+                  </span>
+                </div>
+                <div className={clsx('grid transition-all duration-300', scrolled ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}>
+                  <p className="text-[11px] text-amber-100/85 leading-[1.55] overflow-hidden">{state.scenario_text}</p>
+                </div>
+                {state.aggravation > 0 && state.scenario_hint && (
+                  <p className="mt-1.5 text-[10px] text-cyan-300/80 leading-[1.55] border-t border-amber-500/20 pt-1.5">
+                    💡 {state.scenario_hint}
+                  </p>
+                )}
+              </div>
+
+              {/* Submit button — slides in after first vector interaction */}
+              <div className={clsx(
+                'grid transition-all duration-300',
+                vectorsModified ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              )}>
+                <div className="overflow-hidden">
+                  <button
+                    onClick={submit}
+                    disabled={locked}
+                    className={clsx(
+                      'w-full py-2 rounded-md text-xs font-bold uppercase tracking-widest transition-all',
+                      'border border-eco-accent text-eco-accent hover:bg-eco-accent hover:text-eco-bg',
+                      'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-eco-accent'
+                    )}
+                  >
+                    {updating ? 'Processando…' : 'Submeter distribuição (Enter)'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Distribution points box — always fully visible */}
+              <div className="rounded-md border border-eco-border bg-eco-bg/40 px-3 py-3">
+                <div className="flex items-center justify-between pb-2">
+                  <span className="text-[10px] text-eco-muted uppercase tracking-wider">Pontos de distribuição</span>
+                  <span className="text-xs font-mono font-bold text-eco-accent">{spent} / {budget}</span>
+                </div>
+                <div className="w-full h-1.5 bg-eco-border rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-[1200ms] ease-out bg-eco-accent"
+                    style={{ width: `${usedPct}%` }} />
+                </div>
+                <div className={clsx('grid transition-all duration-300', scrolled ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}>
+                  <p className="text-[10px] text-eco-muted leading-[1.6] pt-2 overflow-hidden">
+                    Distribua os pontos entre os vetores. Redistribua à vontade até submeter.
+                  </p>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            {/* Scenario countdown — shrinks with difficulty; frozen while paused; auto-submits at zero */}
+            <div className="pb-3">
+              <ScenarioTimer
+                seconds={timerSeconds}
+                resetKey={timerKey}
+                active={!locked}
+                onExpire={submit}
+              />
+            </div>
+          </div>
+
+          {/* Region */}
+          <div className="flex items-center justify-between px-0.5 text-[10px] text-eco-muted/70">
+            <span>{REGION_PT[state.region] ?? state.region}</span>
+            <span>Cenário #{state.scenario_index + 1}</span>
+          </div>
+
+          {/* ── Platforms ── */}
           {PLATFORMS.map((platform, pIdx) => {
-            const platformVectors = [
-              ...platform.vectors.filter((vKey) => !INVERSE_VECTORS.has(vKey)),
-              ...platform.vectors.filter((vKey) => INVERSE_VECTORS.has(vKey)),
-            ]
+            const vecs = platform.vectors
+              .filter((vKey) => !SPACE_ONLY_VECTORS.has(vKey) || isSpace)
+              .filter((vKey) => !OCEAN_ONLY_VECTORS.has(vKey) || isOcean)
               .map((vKey) => ({ vKey, v: state.vectors[vKey] }))
               .filter(({ v }) => !!v)
 
-            if (!platformVectors.length) return null
+            if (!vecs.length) return null
 
             return (
               <section key={platform.id} className={clsx(pIdx > 0 && 'border-t border-eco-border pt-3')}>
                 {/* Platform header */}
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1.5">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ background: platform.color }} />
                   <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: platform.color }}>
                     {platform.label}
                   </span>
                 </div>
 
-                {/* Vector rows */}
-                {platformVectors.map(({ vKey, v }) => {
-                  const isInverse = INVERSE_VECTORS.has(vKey)
-                  const health = isInverse
-                    ? 1 - v.value / 100
-                    : vKey === 'temperature'
-                      ? Math.max(0, 1 - Math.abs(v.value - 50) / 50)
-                      : v.value / 100
-                  const barCls = isInverse
-                    ? 'bg-red-500'
-                    : health > 0.65 ? 'bg-green-400' : health > 0.35 ? 'bg-amber-400' : 'bg-red-500'
-                  const txtCls = isInverse
-                    ? 'text-red-400'
-                    : health > 0.65 ? 'text-green-400' : health > 0.35 ? 'text-amber-400' : 'text-red-400'
-                  const goodTrend = isInverse ? v.trend < -0.5 : v.trend > 0.5
-                  const badTrend = isInverse ? v.trend > 0.5 : v.trend < -0.5
-
+                {/* Adjustable vector rows */}
+                {vecs.map(({ vKey, v }) => {
+                  // Center-out bar: dot at center (0), extends left (red) for negative,
+                  // right (green) for positive. Half-fill width = |value| / max of each half.
+                  const fillPct = (Math.abs(v.value) / VECTOR_MAX) * 50
+                  const positive = v.value > 0.5
+                  const negative = v.value < -0.5
+                  const numColor = positive ? 'text-green-400' : negative ? 'text-red-400' : 'text-eco-accent'
                   return (
-                    <div key={vKey} className={clsx('py-[3px]', v.critical && 'eco-critical')}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-eco-muted w-[90px] shrink-0 truncate">
-                          {VECTOR_LABELS_PT[vKey] || v.label}
-                          {isInverse && (
-                            <span className="text-amber-500/60 ml-1 text-[9px]">↓</span>
-                          )}
-                        </span>
-                        <div className="flex-1 h-1.5 bg-eco-border rounded-full overflow-hidden">
-                          <div className={clsx('h-full rounded-full transition-all duration-700', barCls)}
-                            style={{ width: `${Math.max(2, v.value)}%` }} />
-                        </div>
-                        <span className={clsx('text-[10px] font-mono font-bold w-8 text-right shrink-0', txtCls)}>
-                          {Math.round(v.value)}
-                        </span>
-                        <span className={clsx('text-[9px] w-3 text-center shrink-0',
-                          goodTrend ? 'text-green-400' : badTrend ? 'text-red-400' : 'text-eco-muted/40'
-                        )}>
-                          {trendArrow(v.trend)}
-                        </span>
+                  <div key={vKey} className="py-[3px]">
+                    {/* Label + bar(desktop)/value(mobile) row */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-eco-muted shrink-0 truncate flex-1 lg:flex-none lg:w-[90px]">
+                        {VECTOR_LABELS_PT[vKey] || v.label}
+                      </span>
+                      {/* Bar inline — desktop only */}
+                      <div className="relative flex-1 h-1.5 bg-eco-border rounded-full overflow-hidden hidden lg:block">
+                        <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-eco-muted/30" />
+                        {positive && <div className="absolute left-1/2 top-0 bottom-0 bg-green-500/80 transition-all duration-[600ms] ease-out" style={{ width: `${fillPct}%` }} />}
+                        {negative && <div className="absolute right-1/2 top-0 bottom-0 bg-red-500/80 transition-all duration-[600ms] ease-out" style={{ width: `${fillPct}%` }} />}
+                        <div className="absolute left-1/2 top-1/2 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-eco-accent" />
                       </div>
-
-                      {/* Adjustment buttons — inverse vectors are read-only consequences */}
-                      {showMenu && !isInverse && (
-                        <div className="flex items-center gap-1 mt-1 mb-0.5 pl-[94px]">
-                          {vKey === 'temperature' && AMOUNTS.map((amt) => (
-                            <button key={`-${amt}`}
-                              onClick={() => adjustResource(vKey, -amt, amt)}
-                              disabled={gameEnded || supply < amt}
-                              className="flex-1 text-[10px] py-0.5 rounded border border-red-800/50 text-red-400/60 hover:border-red-500/70 hover:text-red-400 transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
-                              -{amt}
-                            </button>
-                          ))}
-                          {AMOUNTS.map((amt) => (
-                            <button key={`+${amt}`}
-                              onClick={() => adjustResource(vKey, amt, amt)}
-                              disabled={gameEnded || supply < amt}
-                              title={supply < amt ? `Precisa de ${amt} supply` : undefined}
-                              className="flex-1 text-[10px] py-0.5 rounded border border-eco-border text-eco-muted hover:border-eco-accent hover:text-eco-accent transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
-                              +{amt}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {showMenu && isInverse && (
-                        <div className="pl-[94px] mt-0.5">
-                          <span className={clsx(
-                            'text-[9px] italic',
-                            v.critical ? 'text-red-400/80' : v.value > 55 ? 'text-amber-400/70' : 'text-eco-muted/50'
-                          )}>
-                            {inverseAdvice(vKey, v.value)}
-                          </span>
-                        </div>
-                      )}
+                      <span className={clsx('text-[10px] font-mono font-bold w-8 text-right shrink-0', numColor)}>
+                        {formatSigned(v.value)}
+                      </span>
                     </div>
+
+                    {/* Bar full-width — mobile only */}
+                    <div className="relative h-1.5 bg-eco-border rounded-full overflow-hidden mt-1 lg:hidden">
+                      <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-eco-muted/30" />
+                      {positive && <div className="absolute left-1/2 top-0 bottom-0 bg-green-500/80 transition-all duration-[600ms] ease-out" style={{ width: `${fillPct}%` }} />}
+                      {negative && <div className="absolute right-1/2 top-0 bottom-0 bg-red-500/80 transition-all duration-[600ms] ease-out" style={{ width: `${fillPct}%` }} />}
+                      <div className="absolute left-1/2 top-1/2 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-eco-accent" />
+                    </div>
+
+                    {/* +/- controls — instant & client-side; clicking while paused auto-resumes */}
+                    <div className={clsx('flex items-center gap-1 mt-1 mb-0.5 lg:pl-[94px] transition-opacity duration-300', lockedHard && 'opacity-40')}>
+                      {AMOUNTS.slice().reverse().map((amt) => (
+                        <button key={`-${amt}`}
+                          onClick={() => adjustResource(vKey, -amt)}
+                          disabled={lockedHard || moveDelta(vKey, -amt) === null}
+                          className="flex-1 text-[10px] py-0.5 rounded border border-red-800/50 text-red-400/70 hover:border-red-500/70 hover:text-red-400 transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
+                          −{amt}
+                        </button>
+                      ))}
+                      {AMOUNTS.map((amt) => (
+                        <button key={`+${amt}`}
+                          onClick={() => adjustResource(vKey, amt)}
+                          disabled={lockedHard || moveDelta(vKey, amt) === null}
+                          className="flex-1 text-[10px] py-0.5 rounded border border-eco-border text-eco-muted hover:border-eco-accent hover:text-eco-accent transition-colors disabled:opacity-20 disabled:cursor-not-allowed">
+                          +{amt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   )
                 })}
               </section>

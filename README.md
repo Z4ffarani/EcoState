@@ -1,8 +1,52 @@
 ![EcoState](frontend/public/banner.png)
 
-EcoState é uma plataforma de simulação em tempo real onde o jogador governa um estado — terrestre, lunar ou marciano — gerenciando recursos e respondendo a crises para garantir sua sobrevivência e prosperidade. Concebido para explorar tanto a economia espacial em expansão quanto cenários de sobrevivência em condições extremas, o protótipo serve como ambiente didático e informativo sobre as interdependências entre meio ambiente, energia, economia e governança.
+EcoState é um simulador de gestão de estado em tempo real onde o jogador governa um território — tropical, desértico, ártico, oceânico, lunar ou marciano — gerenciando vetores ecológicos e respondendo a crises para garantir a sobrevivência e prosperidade da população. Concebido para explorar as interdependências entre meio ambiente, energia, saúde e tecnologia em contextos extremos, o protótipo serve como ambiente didático sobre sistemas complexos e resiliência planetária.
 
-A simulação rastreia **16 vetores de estado** distribuídos em seis plataformas (Biosfera, Hidrologia, Energia, Atmosfera, Saúde e Tecnologia), cada um com tendência em tempo real e eventos críticos aleatórios. O jogador aloca um pool de suprimentos finito para ajustar vetores e manter o progresso do estado através de limiares crescentes — enquanto crises climáticas, epidemias ou falhas energéticas testam sua resiliência. Projetado como protótipo escalável, a arquitetura separa claramente front-end (Next.js + Three.js), back-end (FastAPI + WebSocket) e persistência (Redis), pronta para crescer tanto em profundidade de simulação quanto em tecnologias integradas.
+A simulação rastreia **vetores de estado** distribuídos em seis plataformas (Biosfera, Hidrologia, Energia, Atmosfera, Saúde e Tecnologia). Cada plataforma possui um ícone 3D animado que pulsa conforme a saúde do setor. O jogador aloca um pool de suprimentos finito entre os vetores e submete sua distribuição dentro de um **countdown** por cenário — que continua correndo e se intensifica a cada falha, sem pausas. Ao expirar o tempo, os vetores configurados são validados automaticamente: se o equilíbrio for atingido, o estado avança; caso contrário, a crise se agrava. A duração do countdown só diminui ao avançar de nível — não ao acumular falhas.
+
+---
+
+## Regiões
+
+| Região | Cenário | Destaque visual |
+|---|---|---|
+| **Tropical** | Floresta em crise | Céu pôr-do-sol (laranja→rosa→azul), palmeiras com folhas serrilhadas, colinas de selva |
+| **Deserto** | Escassez hídrica | Campo de dunas com cristas sinusoidais, pirâmides ao horizonte, partículas de areia |
+| **Ártico** | Colapso do gelo polar | Floe de gelo com rachaduras, icebergs angulares, aurora boreal verde→violeta |
+| **Oceano** | Acidificação / tempestade | Superfície de ondas animadas, sem sol |
+| **Lua** | Colônia lunar em sobrevivência | Céu estrelado, Terra com continentes irregulares, Saturno com anéis Cassini, galáxia espiral, cometa |
+| **Marte** | Terraformação | Terreno avermelhado com crateras, rochas assimétricas, Fobos/Deimos, partículas de poeira |
+
+Cada região exibe um **fundo 3D procedural** exclusivo (React Three Fiber) e névoa atmosférica calibrada. O canvas Three.js usa fundo transparente com gradiente CSS independente, permitindo gradientes ricos sem custo de GPU.
+
+---
+
+## Mecânica de Jogo
+
+### Vetores e Plataformas
+
+Cada setor da simulação agrupa um conjunto de vetores ajustáveis. O jogador distribui pontos de um **orçamento de suprimentos** finito entre os vetores — redistribuindo à vontade até submeter. A submissão pode ser feita clicando no botão **"Submeter distribuição (Enter)"** ou pressionando `Enter`.
+
+### Countdown por Cenário
+
+- Cada cenário tem um **countdown** baseado no nível de progresso: 60 s (níveis 1–2), 45 s (3–5), 30 s (6–8), 20 s (9+).
+- Ao expirar, a distribuição configurada é **validada automaticamente** — se o equilíbrio for atingido, o jogador avança; se não, a crise se agrava e o countdown reinicia no mesmo tempo.
+- O timer **nunca para**: cicla continuamente até o jogo terminar (vitória ou game over).
+- A duração do countdown **só diminui ao avançar de nível** — falhas repetidas dentro do mesmo nível não encurtam o tempo.
+
+### Progresso e Resultados
+
+| Resultado | Condição | Efeito |
+|---|---|---|
+| `success` | Vetores dentro do limiar de equilíbrio | Avança um nível; timer reinicia |
+| `miss` | Próximo mas fora do limiar | Agrava o cenário (hint liberado) |
+| `fail` | Muito distante do equilíbrio | Game over |
+
+### Pausa e Controles
+
+- **Pausar**: pausa o timer e bloqueia a submissão. Ajustar vetores enquanto pausado retoma automaticamente.
+- **Reiniciar**: cria nova sessão do zero.
+- **Enter**: submete a distribuição atual a qualquer momento.
 
 ---
 
@@ -10,7 +54,7 @@ A simulação rastreia **16 vetores de estado** distribuídos em seis plataforma
 
 | Camada | Tecnologia |
 |---|---|
-| Front-end | Next.js 15, React 19, Three.js / R3F, Tailwind CSS v4 |
+| Front-end | Next.js 15, React 19, Three.js / React Three Fiber, Tailwind CSS v4, Zustand |
 | Back-end | Python 3.12, FastAPI, WebSocket (uvicorn) |
 | Sessões | Redis (TTL 2h) com fallback in-memory |
 | Autenticação | JWT HS256 (`python-jose`) |
@@ -22,15 +66,21 @@ A simulação rastreia **16 vetores de estado** distribuídos em seis plataforma
 
 ```
 Browser (usuário)
-    │  HTTPS/REST  →  POST /session, POST /session/resource ...
+    │  HTTPS/REST  →  POST /session, POST /session/submit ...
     │  WSS         →  /ws?token=<jwt>
     ▼
 Railway CDN / TLS termination
     │
     ├── Front-end  (Next.js · porta 3000)
+    │     ├── SimulatorScene   — canvas R3F com fundo 3D por região
+    │     ├── Sidebar          — controles de vetores, countdown, submit
+    │     ├── ProgressBar      — barra de nível, timer mobile
+    │     └── SceneBackgrounds — backgrounds 3D procedurais (6 regiões)
     └── Back-end   (FastAPI · porta 8000)
-                      │
-                      └── Redis  (sessões · TTL 2h)
+          ├── simulation_engine.py — lógica de vetores, cenários, progresso
+          ├── scenarios.py         — banco de cenários por região
+          ├── session_manager.py   — CRUD de sessão no Redis
+          └── Redis  (sessões · TTL 2h)
 ```
 
 Todo o tráfego externo trafega sobre **TLS 1.2+** (HTTPS/WSS) — fornecido pelo Railway. A comunicação Front-end → Back-end usa JWT em cada requisição REST e na abertura do WebSocket.
@@ -56,6 +106,7 @@ cp .env.example .env
 
 # Carregue as vars e suba o servidor
 env $(cat .env | xargs) python main.py
+# Windows: set /p < .env && python main.py
 ```
 
 ### Front-end
@@ -63,6 +114,9 @@ env $(cat .env | xargs) python main.py
 ```bash
 cd frontend
 cp .env.local.example .env.local
+# Edite .env.local:
+#   NEXT_PUBLIC_API_URL=http://localhost:8000
+#   NEXT_PUBLIC_WS_URL=ws://localhost:8000
 npm install
 npm run dev
 ```
@@ -148,7 +202,7 @@ Acesse: `http://localhost:3000`
 
 #### Vetor 5 — Injeção via Input do Usuário
 
-**Como aconteceria:** Um usuário mal-intencionado envia um payload JSON manipulado com campos extras, tipos inesperados (ex: `"amount": "'; DROP TABLE sessions; --"`), ou valores fora do intervalo esperado para tentar corromper o estado da simulação ou explorar deserialização insegura.
+**Como aconteceria:** Um usuário mal-intencionado envia um payload JSON manipulado com campos extras, tipos inesperados (ex: `"vectors": "'; DROP TABLE sessions; --"`), ou valores fora do intervalo esperado para tentar corromper o estado da simulação ou explorar deserialização insegura.
 
 **Controles aplicados:**
 - Todos os inputs da API são validados por **modelos Pydantic** (`models.py`) com tipagem estrita — dados inválidos retornam HTTP 422 antes de chegar à lógica de negócio
@@ -167,9 +221,10 @@ Acesse: `http://localhost:3000`
 ```
 POST /session           → sem autenticação (cria sessão, retorna JWT)
 GET  /session           → requer JWT válido  → só lê a própria sessão
-POST /session/resource  → requer JWT válido  → só modifica a própria sessão
-DELETE /session         → requer JWT válido  → só deleta a própria sessão
-GET  /ws?token=<jwt>    → requer JWT válido  → stream da própria sessão
+POST /session/submit    → requer JWT válido  → valida e avança o estado
+PATCH /session/profile  → requer JWT válido  → atualiza perfil do operador
+DELETE /session         → requer JWT válido  → encerra e deleta a sessão
+GET  /ws?token=<jwt>    → requer JWT válido  → stream em tempo real da sessão
 ```
 
 **Fluxo de autenticação:**

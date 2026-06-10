@@ -1,17 +1,19 @@
 'use client'
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState, useCallback, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useSimStore } from '@/store/useSimStore'
-import { PLATFORMS, VECTOR_LABELS_PT, getPlatformHealth, healthColor, GameState } from '@/lib/vectors'
+import { PLATFORMS, getPlatformHealth, healthColor, VectorState } from '@/lib/vectors'
+import { scenarioPlatforms } from '@/lib/scenarioTargets'
+import { SceneBackground, REGION_SKY, REGION_FOG } from './SceneBackgrounds'
 
 // ── Shared pie-slice geometry ─────────────────────────────────────────────────
-let _sliceGeo: THREE.ExtrudeGeometry | null = null
+let _sliceGeo: THREE.ExtrudeGeometry | null = null  // reset on module reload
 function getSliceGeo(): THREE.ExtrudeGeometry {
   if (!_sliceGeo) {
     const inner = 1.65
-    const outer = 3.2
+    const outer = 2.91
     const halfSpan = Math.PI / 6 - 0.12   // ~23° → 46° arc, ~14° gap
 
     const shape = new THREE.Shape()
@@ -22,7 +24,7 @@ function getSliceGeo(): THREE.ExtrudeGeometry {
     shape.absarc(0, 0, inner, halfSpan, -halfSpan, true)
 
     _sliceGeo = new THREE.ExtrudeGeometry(shape, {
-      depth: 0.17,
+      depth: 0.085,
       bevelEnabled: true,
       bevelSize: 0.022,
       bevelThickness: 0.022,
@@ -36,9 +38,16 @@ function getSliceGeo(): THREE.ExtrudeGeometry {
 // ── Platform icons ─────────────────────────────────────────────────────────────
 // Icons raised so their bases start at y ≥ 0.38 (safely above platform top ~0.32).
 
-function BioPlatformIcon({ color }: { color: THREE.Color }) {
+function BioPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
+  const treeRef = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    if (hoveredRef.current || !treeRef.current) return
+    const t = clock.elapsedTime
+    treeRef.current.rotation.z = Math.sin(t * 0.85) * 0.055
+    treeRef.current.rotation.x = Math.sin(t * 0.65 + 1.1) * 0.035
+  })
   return (
-    <group position={[2.4, 0.38, 0]}>
+    <group ref={treeRef} position={[2.28, 0.38, 0]} scale={0.765}>
       <mesh position={[0, 0.12, 0]}>
         <cylinderGeometry args={[0.04, 0.06, 0.24, 6]} />
         <meshStandardMaterial color="#4a2f0a" roughness={0.95} />
@@ -60,60 +69,77 @@ function BioPlatformIcon({ color }: { color: THREE.Color }) {
   )
 }
 
-function HydroPlatformIcon({ color }: { color: THREE.Color }) {
-  // Single unified teardrop via LatheGeometry — profile from (r=0, y=0) at bottom to tip.
+function HydroPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
+  const dropRef = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    if (hoveredRef.current || !dropRef.current) return
+    const t = clock.elapsedTime
+    // Slow, organic pulse — stretch up, squish sides (volume-conserving feel)
+    const s = (Math.sin(t * 1.5) + 1) * 0.5   // 0..1
+    const sy = 1 + s * 0.13
+    const sxz = 1 - s * 0.06
+    dropRef.current.scale.set(sxz, sy, sxz)
+    dropRef.current.position.y = s * 0.025
+  })
+
+  // Water-drop profile: wide rounded base, tapers to a narrow tip at top.
   const dropGeo = useMemo(() => {
     const pts: THREE.Vector2[] = [
-      new THREE.Vector2(0.000, 0.000),
-      new THREE.Vector2(0.038, 0.013),
-      new THREE.Vector2(0.092, 0.048),
-      new THREE.Vector2(0.148, 0.108),
-      new THREE.Vector2(0.183, 0.178),
-      new THREE.Vector2(0.197, 0.238),  // widest point
-      new THREE.Vector2(0.188, 0.298),
-      new THREE.Vector2(0.162, 0.358),
-      new THREE.Vector2(0.122, 0.412),
-      new THREE.Vector2(0.076, 0.456),
-      new THREE.Vector2(0.036, 0.494),
-      new THREE.Vector2(0.000, 0.518),  // tip
+      new THREE.Vector2(0.000, 0.000),  // bottom center
+      new THREE.Vector2(0.085, 0.012),
+      new THREE.Vector2(0.168, 0.050),
+      new THREE.Vector2(0.215, 0.118),
+      new THREE.Vector2(0.228, 0.200),  // widest — lower third
+      new THREE.Vector2(0.216, 0.285),
+      new THREE.Vector2(0.185, 0.368),
+      new THREE.Vector2(0.138, 0.444),
+      new THREE.Vector2(0.082, 0.508),
+      new THREE.Vector2(0.000, 0.555),  // tip
     ]
-    return new THREE.LatheGeometry(pts, 20)
+    return new THREE.LatheGeometry(pts, 22)
   }, [])
 
   return (
-    <group position={[2.4, 0.38, 0]}>
-      <mesh geometry={dropGeo}>
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.82}
-          transparent
-          opacity={0.92}
-          roughness={0.06}
-          metalness={0.14}
-        />
-      </mesh>
+    <group position={[2.28, 0.38, 0]} scale={0.765}>
+      <group ref={dropRef}>
+        <mesh geometry={dropGeo}>
+          <meshStandardMaterial
+            color={color}
+            emissive={color}
+            emissiveIntensity={0.82}
+            transparent
+            opacity={0.92}
+            roughness={0.06}
+            metalness={0.14}
+          />
+        </mesh>
+      </group>
       <pointLight position={[0, 0.28, 0]} intensity={0.5} color={color} distance={1.4} decay={2} />
     </group>
   )
 }
 
-function PowerPlatformIcon({ color }: { color: THREE.Color }) {
-  const ringsRef = useRef<THREE.Group>(null)
-  useFrame(({ clock }) => {
-    if (ringsRef.current) ringsRef.current.rotation.y = clock.elapsedTime * 0.45
+function PowerPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
+  const ring1Ref = useRef<THREE.Group>(null)
+  const ring2Ref = useRef<THREE.Group>(null)
+  useFrame((_, delta) => {
+    if (hoveredRef.current) return
+    if (ring1Ref.current) ring1Ref.current.rotation.z += delta * 0.60
+    if (ring2Ref.current) ring2Ref.current.rotation.y += delta * 0.85
   })
   return (
-    <group position={[2.4, 0.52, 0]}>
+    <group position={[2.28, 0.52, 0]} scale={0.85}>
       <mesh>
         <sphereGeometry args={[0.13, 14, 14]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.2} />
       </mesh>
-      <group ref={ringsRef}>
+      <group ref={ring1Ref}>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.25, 0.016, 6, 28]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.7} metalness={0.9} />
         </mesh>
+      </group>
+      <group ref={ring2Ref}>
         <mesh rotation={[Math.PI / 4, 0, Math.PI / 4]}>
           <torusGeometry args={[0.25, 0.016, 6, 28]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.9} />
@@ -124,13 +150,14 @@ function PowerPlatformIcon({ color }: { color: THREE.Color }) {
   )
 }
 
-function AtmoPlatformIcon({ color }: { color: THREE.Color }) {
+function AtmoPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
   const moleculesRef = useRef<THREE.Group>(null)
-  useFrame(({ clock }) => {
-    if (moleculesRef.current) moleculesRef.current.rotation.y = clock.elapsedTime * 0.30
+  useFrame((_, delta) => {
+    if (hoveredRef.current || !moleculesRef.current) return
+    moleculesRef.current.rotation.y += delta * 0.30
   })
   return (
-    <group position={[2.4, 0.38, 0]}>
+    <group position={[2.28, 0.38, 0]}>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.19, 0.022, 6, 28]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
@@ -155,13 +182,14 @@ function AtmoPlatformIcon({ color }: { color: THREE.Color }) {
   )
 }
 
-function HealthPlatformIcon({ color }: { color: THREE.Color }) {
+function HealthPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
   const crossRef = useRef<THREE.Group>(null)
-  useFrame(({ clock }) => {
-    if (crossRef.current) crossRef.current.rotation.y = clock.elapsedTime * 0.19
+  useFrame((_, delta) => {
+    if (hoveredRef.current || !crossRef.current) return
+    crossRef.current.rotation.y += delta * 0.19
   })
   return (
-    <group ref={crossRef} position={[2.4, 0.56, 0]}>
+    <group ref={crossRef} position={[2.28, 0.56, 0]}>
       <mesh>
         <boxGeometry args={[0.36, 0.1, 0.07]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.88} metalness={0.4} roughness={0.3} />
@@ -175,20 +203,19 @@ function HealthPlatformIcon({ color }: { color: THREE.Color }) {
   )
 }
 
-function TechPlatformIcon({ color }: { color: THREE.Color }) {
+function TechPlatformIcon({ color, hoveredRef }: { color: THREE.Color; hoveredRef: React.RefObject<boolean> }) {
   const signalRef = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
-    if (signalRef.current) {
-      const t = clock.elapsedTime
-      signalRef.current.children.forEach((child, i) => {
-        const mesh = child as THREE.Mesh
-        const mat = mesh.material as THREE.MeshStandardMaterial
-        mat.opacity = 0.25 + Math.sin(t * 2 - i * 0.7) * 0.35
-      })
-    }
+    if (hoveredRef.current || !signalRef.current) return
+    const t = clock.elapsedTime
+    signalRef.current.children.forEach((child, i) => {
+      const mesh = child as THREE.Mesh
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      mat.opacity = 0.25 + Math.sin(t * 2 - i * 0.7) * 0.35
+    })
   })
   return (
-    <group position={[2.4, 0.38, 0]}>
+    <group position={[2.28, 0.38, 0]}>
       <mesh position={[0, 0.18, 0]}>
         <cylinderGeometry args={[0.025, 0.04, 0.36, 6]} />
         <meshStandardMaterial color="#2a2a3a" metalness={0.85} roughness={0.2} />
@@ -210,7 +237,7 @@ function TechPlatformIcon({ color }: { color: THREE.Color }) {
   )
 }
 
-const ICON_COMPONENTS: Record<string, React.ComponentType<{ color: THREE.Color }>> = {
+const ICON_COMPONENTS: Record<string, React.ComponentType<{ color: THREE.Color; hoveredRef: React.RefObject<boolean> }>> = {
   bio:    BioPlatformIcon,
   hydro:  HydroPlatformIcon,
   power:  PowerPlatformIcon,
@@ -220,15 +247,31 @@ const ICON_COMPONENTS: Record<string, React.ComponentType<{ color: THREE.Color }
 }
 
 // ── Platform (pie slice + icon) ───────────────────────────────────────────────
-function Platform({ def, vectors, onClick }: {
+function Platform({ def, vectors, onClick, onHoverChange, active }: {
   def: typeof PLATFORMS[0]
-  vectors: GameState['vectors']
+  vectors: Record<string, VectorState>
   onClick: () => void
+  onHoverChange: (hovered: boolean) => void
+  active: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
-  const health = getPlatformHealth(def, vectors)
-  const color = healthColor(health)
-  const threeColor = useMemo(() => new THREE.Color(color), [color])
+  const fadeGroupRef = useRef<THREE.Group>(null)
+  const currentAlpha = useRef(active ? 1 : 0)
+  const baseOpacities = useRef<WeakMap<THREE.Material, number>>(new WeakMap())
+
+  // Record each material's original opacity after the first R3F commit so we
+  // get the real JSX-declared value (e.g. 0.12 for the atmo dome), not the
+  // Three.js default of 1 that exists before R3F applies its props.
+  useEffect(() => {
+    fadeGroupRef.current?.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const mat = child.material as THREE.MeshStandardMaterial
+        if (!baseOpacities.current.has(mat)) baseOpacities.current.set(mat, mat.opacity)
+      }
+    })
+  }, [])
+  const hoveredRef = useRef(false)
+  const threeColor = useMemo(() => new THREE.Color('#00c8ff'), [])
   const defColor = useMemo(() => new THREE.Color(def.color), [def.color])
   const setPlatformTooltip = useSimStore((s) => s.setPlatformTooltip)
   const setPlatformModal = useSimStore((s) => s.setPlatformModal)
@@ -236,53 +279,80 @@ function Platform({ def, vectors, onClick }: {
     typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   , [])
 
-  useFrame(({ clock }) => {
-    if (groupRef.current) {
-      groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.8 + def.angle * 0.05) * 0.06
+  useFrame(({ clock }, delta) => {
+    // Fade in / fade out by animating opacity of all child meshes
+    if (fadeGroupRef.current) {
+      const target = active ? 1 : 0
+      currentAlpha.current += (target - currentAlpha.current) * Math.min(1, delta * 3)
+      const alpha = currentAlpha.current
+      fadeGroupRef.current.visible = alpha > 0.005
+      fadeGroupRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          const mat = child.material as THREE.MeshStandardMaterial
+          if (!baseOpacities.current.has(mat)) baseOpacities.current.set(mat, mat.opacity)
+          const base = baseOpacities.current.get(mat)!
+          if (!mat.transparent) mat.transparent = true
+          mat.opacity = base * alpha
+        }
+      })
+    }
+
+    if (!groupRef.current) return
+    if (hoveredRef.current) {
+      groupRef.current.position.y *= 0.88
+    } else {
+      groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.8 + def.angle * 0.05) * 0.03
     }
   })
 
   const Icon = ICON_COMPONENTS[def.id]
 
   return (
-    <group ref={groupRef} rotation={[0, -(def.angle * Math.PI / 180), 0]}>
-      <mesh
-        geometry={getSliceGeo()}
-        onClick={() => {
-          if (isTouchDevice) setPlatformModal(def.id)
-          onClick()
-        }}
-        onPointerEnter={(e) => {
-          if (isTouchDevice) return
-          e.stopPropagation()
-          setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
-        }}
-        onPointerMove={(e) => {
-          if (isTouchDevice) return
-          setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
-        }}
-        onPointerLeave={() => {
-          if (isTouchDevice) return
-          setPlatformTooltip(null)
-        }}
-      >
-        <meshStandardMaterial
-          color={threeColor}
-          emissive={threeColor}
-          emissiveIntensity={0.18}
-          metalness={0.35}
-          roughness={0.55}
-          transparent
-          opacity={0.9}
-        />
-      </mesh>
-      {Icon && <Icon color={defColor} />}
+    <group ref={fadeGroupRef}>
+      <group ref={groupRef} rotation={[0, -(def.angle * Math.PI / 180), 0]}>
+        <mesh
+          geometry={getSliceGeo()}
+          onClick={() => {
+            if (!active) return
+            if (isTouchDevice) setPlatformModal(def.id)
+            onClick()
+          }}
+          onPointerEnter={(e) => {
+            if (!active || isTouchDevice) return
+            hoveredRef.current = true
+            onHoverChange(true)
+            e.stopPropagation()
+            setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
+          }}
+          onPointerMove={(e) => {
+            if (!active || isTouchDevice) return
+            setPlatformTooltip({ id: def.id, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY })
+          }}
+          onPointerLeave={() => {
+            if (isTouchDevice) return
+            hoveredRef.current = false
+            onHoverChange(false)
+            setPlatformTooltip(null)
+          }}
+        >
+          <meshStandardMaterial
+            color={threeColor}
+            emissive={threeColor}
+            emissiveIntensity={0.18}
+            metalness={0.35}
+            roughness={0.55}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+        {Icon && <Icon color={defColor} hoveredRef={hoveredRef} />}
+      </group>
     </group>
   )
 }
 
 // ── Greenhouse hub ─────────────────────────────────────────────────────────────
-function Greenhouse({ health }: { health: number }) {
+function Greenhouse() {
   const houseRef = useRef<THREE.Group>(null)
 
   useFrame(({ clock }) => {
@@ -291,22 +361,8 @@ function Greenhouse({ health }: { health: number }) {
     }
   })
 
-  // Column color transitions green → amber → red as health falls
-  const columnColor = useMemo(() => {
-    const c = new THREE.Color()
-    if (health >= 0.75) {
-      c.set('#00c8ff')
-    } else if (health >= 0.5) {
-      const t = (health - 0.5) / 0.25
-      c.lerpColors(new THREE.Color('#f59e0b'), new THREE.Color('#00c8ff'), t)
-    } else if (health >= 0.25) {
-      const t = (health - 0.25) / 0.25
-      c.lerpColors(new THREE.Color('#ef4444'), new THREE.Color('#f59e0b'), t)
-    } else {
-      c.set('#ef4444')
-    }
-    return c
-  }, [health])
+  // Greenhouse is always cyan — the primary accent color.
+  const columnColor = useMemo(() => new THREE.Color('#00c8ff'), [])
 
   const pillars = useMemo(() =>
     Array.from({ length: 6 }, (_, i) => {
@@ -485,137 +541,39 @@ function Greenhouse({ health }: { health: number }) {
   )
 }
 
-// ── Starfield ─────────────────────────────────────────────────────────────────
-function Stars() {
-  const geometry = useMemo(() => {
-    const positions = new Float32Array(500 * 3)
-    for (let i = 0; i < 500; i++) {
-      positions[i * 3]     = (Math.random() - 0.5) * 110
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 110
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 110
-    }
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    return geo
-  }, [])
-
-  return (
-    <points geometry={geometry}>
-      <pointsMaterial size={0.09} color="#a0d8ef" sizeAttenuation />
-    </points>
-  )
-}
-
-// ── Space objects (planets, galaxy, comet) ────────────────────────────────────
-function SpaceObjects() {
-  const cometRef = useRef<THREE.Group>(null)
-
-  const galaxyGeo = useMemo(() => {
-    const count = 520
-    const pos = new Float32Array(count * 3)
-    for (let i = 0; i < count; i++) {
-      const t = i / count
-      const r = 8 * t + (Math.random() - 0.5) * 2.0
-      const angle = t * Math.PI * 9 + (Math.random() - 0.5) * 0.5
-      pos[i * 3]     = Math.cos(angle) * r
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 1.4 * (1 - t * 0.65)
-      pos[i * 3 + 2] = Math.sin(angle) * r
-    }
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    return geo
-  }, [])
-
-  useFrame(({ clock }) => {
-    if (cometRef.current) {
-      const t = clock.elapsedTime * 0.035
-      cometRef.current.position.set(
-        22 + Math.cos(t) * 14,
-        9 + Math.sin(t * 0.38) * 4,
-        -44
-      )
-    }
-  })
-
-  return (
-    <group>
-      {/* Planet 1 — Mars-like with ring */}
-      <group position={[36, 9, -42]}>
-        <mesh>
-          <sphereGeometry args={[2.2, 26, 16]} />
-          <meshStandardMaterial color="#c1440e" emissive="#6a1e02" emissiveIntensity={0.18} roughness={0.85} />
-        </mesh>
-        <mesh rotation={[0.38, 0, 0]}>
-          <torusGeometry args={[3.9, 0.3, 2, 52]} />
-          <meshStandardMaterial color="#a06030" transparent opacity={0.42} roughness={0.9} />
-        </mesh>
-        <pointLight intensity={0.07} color="#c1440e" distance={28} decay={1} />
-      </group>
-
-      {/* Planet 2 — ice blue */}
-      <group position={[-40, -5, -36]}>
-        <mesh>
-          <sphereGeometry args={[1.5, 24, 16]} />
-          <meshStandardMaterial color="#6ab0d4" emissive="#1a4060" emissiveIntensity={0.2} roughness={0.7} />
-        </mesh>
-        <pointLight intensity={0.05} color="#6ab0d4" distance={22} decay={1} />
-      </group>
-
-      {/* Planet 3 — purple gas giant */}
-      <group position={[17, 26, -55]}>
-        <mesh>
-          <sphereGeometry args={[1.8, 24, 16]} />
-          <meshStandardMaterial color="#7b4fa0" emissive="#2a0a40" emissiveIntensity={0.22} roughness={0.8} />
-        </mesh>
-      </group>
-
-      {/* Spiral galaxy cluster */}
-      <group position={[-52, 6, -68]} rotation={[0.25, 0.6, 0.1]}>
-        <points geometry={galaxyGeo}>
-          <pointsMaterial size={0.22} color="#c8a0ff" sizeAttenuation transparent opacity={0.6} />
-        </points>
-      </group>
-
-      {/* Comet with glowing head + transparent tail */}
-      <group ref={cometRef}>
-        <mesh>
-          <sphereGeometry args={[0.22, 10, 8]} />
-          <meshStandardMaterial color="#ffffff" emissive="#aaddff" emissiveIntensity={2.8} />
-        </mesh>
-        <mesh position={[0, 0, 1.6]} rotation={[Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.12, 3.2, 6]} />
-          <meshStandardMaterial color="#88ccff" transparent opacity={0.22} emissive="#88ccff" emissiveIntensity={0.3} />
-        </mesh>
-        <pointLight intensity={0.45} color="#aaddff" distance={12} decay={2} />
-      </group>
-    </group>
-  )
-}
-
 // ── Scene root ─────────────────────────────────────────────────────────────────
 export default function SimulatorScene() {
   const state = useSimStore((s) => s.state)
   const setSelected = useSimStore((s) => s.setSelectedVector)
+  const [platformHovered, setPlatformHovered] = useState(false)
+  const hoveredCountRef = useRef(0)
+  const handleHoverChange = useCallback((h: boolean) => {
+    hoveredCountRef.current = Math.max(0, hoveredCountRef.current + (h ? 1 : -1))
+    setPlatformHovered(hoveredCountRef.current > 0)
+  }, [])
 
   if (!state) return null
 
-  // Greenhouse health driven by overall session progress (0 → 1)
-  const health = state.progress / 100
+  const region = state.region ?? 'moon'
+  const fog = REGION_FOG[region] ?? null
+  const activePlatformIds = scenarioPlatforms(state.scenario_id)
 
   return (
     <Canvas
       camera={{ position: [0, 5.5, 8.5], fov: 50 }}
-      gl={{ antialias: true }}
-      style={{ position: 'absolute', inset: 0, background: '#050e14' }}
+      gl={{ antialias: true, alpha: true }}
+      onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
+      style={{ position: 'absolute', inset: 0, background: REGION_SKY[region] ?? '#050e14' }}
     >
+      {fog && <fog attach="fog" args={fog} />}
+
       <ambientLight intensity={0.35} />
       <pointLight position={[0, 8, 0]} intensity={1.6} color="#00c8ff" />
       <pointLight position={[6, 4, 6]} intensity={0.5} color="#3b82f6" />
       <pointLight position={[-6, 3, -4]} intensity={0.3} color="#6366f1" />
 
-      <Stars />
-      <SpaceObjects />
-      <Greenhouse health={health} />
+      <SceneBackground region={region} />
+      <Greenhouse />
 
       {PLATFORMS.map((p) => (
         <Platform
@@ -623,6 +581,8 @@ export default function SimulatorScene() {
           def={p}
           vectors={state.vectors}
           onClick={() => setSelected(p.id)}
+          onHoverChange={handleHoverChange}
+          active={activePlatformIds === null || activePlatformIds.has(p.id)}
         />
       ))}
 
@@ -634,7 +594,7 @@ export default function SimulatorScene() {
         maxDistance={16}
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.2}
-        autoRotate
+        autoRotate={!platformHovered}
         autoRotateSpeed={0.18}
       />
     </Canvas>

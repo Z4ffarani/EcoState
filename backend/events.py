@@ -54,7 +54,7 @@ CRISIS_EVENTS = [
         "id": "dust_storm",
         "name": "Dust Storm",
         "probability": 0.04,
-        "effects": {"light": -30, "infrastructure": -25, "biodiversity": -20},
+        "effects": {"infrastructure": -25, "vegetation": -15, "energy": -10},
         "duration": 2,
         "regions": ["desert", "mars"],
     },

@@ -6,8 +6,7 @@ import json
 import os
 import uuid
 from models import GameState, CreateSessionRequest
-from regions import get_initial_vectors
-from simulation_engine import PLATFORM_GROUPS, compute_progress
+from simulation_engine import load_scenario
 
 try:
     import redis.asyncio as aioredis
@@ -56,19 +55,15 @@ def _session_key(session_id: str) -> str:
 
 async def create_session(req: CreateSessionRequest) -> GameState:
     session_id = str(uuid.uuid4())
-    vectors_raw = get_initial_vectors(req.region, req.season)
-    from models import VectorState
-    vectors = {k: VectorState(**v) for k, v in vectors_raw.items()}
-
-    initial_progress = compute_progress(0.0, {k: v.model_dump() for k, v in vectors.items()})
     state = GameState(
         session_id=session_id,
-        vectors=vectors,
         region=req.region,
-        season=req.season,
         user_name=req.user_name,
-        progress=initial_progress,
+        level=0,
     )
+    # Load the first scenario: resets vectors to 50, sets hidden targets,
+    # supply budget and indicators.
+    load_scenario(state, 0, 0)
     await save_session(state)
     return state
 
@@ -89,4 +84,4 @@ async def delete_session(session_id: str) -> None:
 
 
 def get_platform_groups() -> dict:
-    return PLATFORM_GROUPS
+    return {}

@@ -2,13 +2,14 @@
 import dynamic from 'next/dynamic'
 import { useState, useEffect } from 'react'
 import { useSimStore } from '@/store/useSimStore'
-import { PLATFORMS, VECTOR_LABELS_PT } from '@/lib/vectors'
+import { PLATFORMS, VECTOR_LABELS_PT, SPACE_REGIONS, SPACE_ONLY_VECTORS, VectorKey, formatSigned } from '@/lib/vectors'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import ProgressBar from '@/components/ProgressBar'
 import SetupScreen from '@/components/SetupScreen'
 import SceneErrorBoundary from '@/components/SceneErrorBoundary'
 import Sidebar from '@/components/Sidebar'
 import VictoryModal from '@/components/VictoryModal'
+import clsx from 'clsx'
 
 const SimulatorScene = dynamic(() => import('@/components/SimulatorScene'), { ssr: false })
 
@@ -38,16 +39,18 @@ function PlatformModal() {
           </button>
         </div>
         <div className="space-y-1.5">
-          {platform.vectors.map((vKey) => {
-            const v = state.vectors[vKey]
-            if (!v) return null
-            return (
-              <div key={vKey} className="text-[11px] flex items-center justify-between gap-6">
-                <span className="text-eco-muted">{VECTOR_LABELS_PT[vKey] || vKey}</span>
-                <span className="font-mono font-bold text-white">{Math.round(v.value)}</span>
-              </div>
-            )
-          })}
+          {platform.vectors
+            .filter((vKey) => !SPACE_ONLY_VECTORS.has(vKey as VectorKey) || SPACE_REGIONS.has(state.region))
+            .map((vKey) => {
+              const v = state.vectors[vKey]
+              if (!v) return null
+              return (
+                <div key={vKey} className="text-[11px] flex items-center justify-between gap-6">
+                  <span className="text-eco-muted">{VECTOR_LABELS_PT[vKey as VectorKey] || vKey}</span>
+                  <span className={clsx('font-mono font-bold', v.value > 0.5 ? 'text-green-400' : v.value < -0.5 ? 'text-red-400' : 'text-eco-accent')}>{formatSigned(v.value)}</span>
+                </div>
+              )
+            })}
         </div>
       </div>
     </>
@@ -69,16 +72,18 @@ function PlatformTooltip() {
     >
       <div className="text-xs font-bold mb-1" style={{ color: platform.color }}>{platform.label}</div>
       <div className="space-y-0.5">
-        {platform.vectors.map((vKey) => {
-          const v = state.vectors[vKey]
-          if (!v) return null
-          return (
-            <div key={vKey} className="text-[10px] text-eco-muted flex items-center gap-1.5">
-              <span>{VECTOR_LABELS_PT[vKey] || vKey}</span>
-              <span className="font-mono text-white">{Math.round(v.value)}</span>
-            </div>
-          )
-        })}
+        {platform.vectors
+          .filter((vKey) => !SPACE_ONLY_VECTORS.has(vKey as VectorKey) || SPACE_REGIONS.has(state.region))
+          .map((vKey) => {
+            const v = state.vectors[vKey]
+            if (!v) return null
+            return (
+              <div key={vKey} className="text-[10px] text-eco-muted flex items-center gap-1.5">
+                <span>{VECTOR_LABELS_PT[vKey as VectorKey] || vKey}</span>
+                <span className={clsx('font-mono', v.value > 0.5 ? 'text-green-400' : v.value < -0.5 ? 'text-red-400' : 'text-eco-accent')}>{formatSigned(v.value)}</span>
+              </div>
+            )
+          })}
       </div>
     </div>
   )
