@@ -1,6 +1,6 @@
 ![EcoState](frontend/public/banner.png)
 
-![Trailer](https://youtu.be/sx-mbC32Hpo)
+**Trailer(https://youtu.be/sx-mbC32Hpo)**
 
 EcoState é um simulador de gestão de estado em tempo real onde o jogador governa um território — tropical, desértico, ártico, oceânico, lunar ou marciano — gerenciando vetores ecológicos e respondendo a crises para garantir a sobrevivência e prosperidade da população. Concebido para explorar as interdependências entre meio ambiente, energia, saúde e tecnologia em contextos extremos, o protótipo serve como ambiente didático sobre sistemas complexos e resiliência planetária.
 
