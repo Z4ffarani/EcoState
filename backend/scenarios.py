@@ -117,7 +117,7 @@ SCENARIOS: list[dict] = [
         "title": "Enchente repentina",
         "narrative": (
             "Chuvas torrenciais inundam os assentamentos. A água invade "
-            "tudo e os sistemas de drenagem não conseguem dar conta."
+            "tudo e o nível sobe rápido demais para escoar naturalmente."
         ),
         "dica": "Contenha o excesso — reduza o volume de água para estabilizar a situação.",
         "targets": {"quantidade_de_agua": -30},
@@ -127,7 +127,7 @@ SCENARIOS: list[dict] = [
         "tier": 1,
         "title": "Apagão energético",
         "narrative": (
-            "A rede elétrica oscila e equipamentos falham em cascata. "
+            "A rede elétrica oscila e a tensão despenca sem aviso. "
             "Sem energia firme, a colônia inteira para."
         ),
         "dica": "A colônia depende de eletricidade — priorize a geração de energia.",
@@ -138,8 +138,8 @@ SCENARIOS: list[dict] = [
         "tier": 1,
         "title": "Onda de calor",
         "narrative": (
-            "O calor extremo castiga a colônia. Estruturas superaquecem "
-            "e os colonos mal conseguem trabalhar sob o sol."
+            "O calor extremo castiga a colônia. O ar abrasador torna "
+            "cada ambiente sufocante e insuportável sob o sol."
         ),
         "dica": "O calor é o inimigo — refresque o ambiente para proteger a colônia.",
         "targets": {"temperature": -20},
@@ -149,8 +149,8 @@ SCENARIOS: list[dict] = [
         "tier": 1,
         "title": "Frente gélida",
         "narrative": (
-            "Uma frente fria congela tudo. O frio penetra nas paredes "
-            "e ameaça paralisar os sistemas que dependem de calor."
+            "Uma frente fria congela tudo. O ar gélido domina cada "
+            "ambiente e ameaça paralisar a colônia inteira."
         ),
         "dica": "O frio corrói tudo — eleve a temperatura interna dos módulos.",
         "targets": {"temperature": 25},
@@ -183,7 +183,7 @@ SCENARIOS: list[dict] = [
         "title": "Solo esgotado",
         "narrative": (
             "Décadas de agricultura intensiva deixaram o solo sem nutrientes. "
-            "Nenhuma semente germina no que antes era terra fértil."
+            "A terra, antes fértil, agora é apenas pó estéril e sem vida."
         ),
         "dica": "A terra precisa ser curada — invista na recuperação do solo agrícola.",
         "targets": {"solo": 30},
@@ -205,7 +205,7 @@ SCENARIOS: list[dict] = [
         "title": "Resíduos tóxicos",
         "narrative": (
             "O acúmulo de resíduos industriais atinge nível crítico. "
-            "Lixiviamento ameaça o solo e os aquíferos da região."
+            "Os depósitos transbordam e exalam compostos perigosos pela colônia."
         ),
         "dica": "Os resíduos precisam ser eliminados — reduza o lixo industrial ao mínimo.",
         "targets": {"residuos": -30},
@@ -238,7 +238,7 @@ SCENARIOS: list[dict] = [
         "tier": 1,
         "title": "Módulo despressurizado",
         "narrative": (
-            "Uma microfratura no casco compromete a pressão do módulo. "
+            "Uma falha de vedação faz a pressão do módulo despencar. "
             "Sem correção imediata, o habitat pode tornar-se inóspito."
         ),
         "dica": "A pressão está caindo — sele o módulo e reestabeleça o nível atmosférico.",
@@ -255,7 +255,7 @@ SCENARIOS: list[dict] = [
         "tier": 2,
         "title": "Seca nas plantações",
         "narrative": (
-            "A falta de chuva ressecou o solo e destruiu a colheita. "
+            "A falta de chuva esvaziou os reservatórios e destruiu a colheita. "
             "Sem água nem hortaliças, a fome se aproxima dos assentamentos."
         ),
         "dica": "Dois sistemas em colapso — restaure a água e as plantações ao mesmo tempo.",
@@ -717,7 +717,7 @@ SCENARIOS: list[dict] = [
         "title": "Inundação e colheita",
         "narrative": (
             "A estação das chuvas inesperadamente forte alagou as plantações. "
-            "O excesso de água destrói os cultivos enquanto o solo se compacta."
+            "O excesso de água submerge e apodrece os cultivos nos canteiros."
         ),
         "dica": "Chuva excessiva e plantações em colapso pedem soluções opostas — reduza a água e recupere os cultivos.",
         "targets": {"quantidade_de_agua": -30, "hortalicas": 30},
@@ -741,8 +741,8 @@ SCENARIOS: list[dict] = [
         "tier": 2,
         "title": "Calor e chuvas tropicais",
         "narrative": (
-            "O clima tropical extremo combina calor intenso com chuvas torrenciais "
-            "repentinas. Dois extremos climáticos acontecem ao mesmo tempo."
+            "O calor tropical extremo evapora os reservatórios e a água potável "
+            "escasseia. É preciso resfriar o ambiente e repor o abastecimento."
         ),
         "dica": "O clima tropical é duplo — resfrie o ambiente e abasteça os reservatórios ao mesmo tempo.",
         "targets": {"temperature": -20, "quantidade_de_agua": 30},
@@ -798,7 +798,7 @@ SCENARIOS: list[dict] = [
         "title": "Calor letal",
         "narrative": (
             "O sol do deserto atinge temperaturas letais. Sem resfriamento imediato, "
-            "os colonos não conseguem trabalhar e os equipamentos falham por superaquecimento."
+            "o calor abrasador torna a colônia inteira inabitável."
         ),
         "dica": "O calor aqui é mais extremo que qualquer onda normal — reduza a temperatura ao máximo.",
         "targets": {"temperature": -35},
@@ -914,7 +914,7 @@ SCENARIOS: list[dict] = [
         "title": "Escuridão e colapso estrutural",
         "narrative": (
             "A noite polar e as estruturas deterioradas criam um ciclo vicioso: "
-            "sem energia não há calor, sem calor as estruturas continuam cedendo."
+            "sem energia, os equipamentos param e as estruturas continuam cedendo."
         ),
         "dica": "Escuridão e colapso estrutural são inseparáveis — energia máxima e infraestrutura reconstruída.",
         "targets": {"energy": 40, "infrastructure": 25},
@@ -956,8 +956,8 @@ SCENARIOS: list[dict] = [
         "tier": 1,
         "title": "Hipersalinidade",
         "narrative": (
-            "A intensa evaporação costeira elevou a salinidade da água a níveis tóxicos "
-            "para humanos e para os sistemas de filtragem da colônia."
+            "A intensa evaporação costeira elevou a salinidade da água a níveis críticos. "
+            "O sal saturado torna cada gota imprópria para o consumo."
         ),
         "dica": "A água está salgada demais — ative os sistemas de dessalinização ao máximo.",
         "targets": {"salinidade": -30},
