@@ -1,10 +1,19 @@
 ![EcoState](frontend/public/banner.png)
 
-**[Trailer](https://youtu.be/sx-mbC32Hpo)**
+**[Site](https://ecostate.up.railway.app) · [Trailer](https://youtu.be/sx-mbC32Hpo)**
 
 EcoState é um simulador de gestão de estado em tempo real onde o jogador governa um território — tropical, desértico, ártico, oceânico, lunar ou marciano — gerenciando vetores ecológicos e respondendo a crises para garantir a sobrevivência e prosperidade da população. Concebido para explorar as interdependências entre meio ambiente, energia, saúde e tecnologia em contextos extremos, o protótipo serve como ambiente didático sobre sistemas complexos e resiliência planetária.
 
 A simulação rastreia **vetores de estado** distribuídos em seis plataformas (Biosfera, Hidrologia, Energia, Atmosfera, Saúde e Tecnologia). Cada plataforma possui um ícone 3D animado que pulsa conforme a saúde do setor. O jogador aloca um pool de suprimentos finito entre os vetores e submete sua distribuição dentro de um **countdown** por cenário — que continua correndo e se intensifica a cada falha, sem pausas. Ao expirar o tempo, os vetores configurados são validados automaticamente: se o equilíbrio for atingido, o estado avança; caso contrário, a crise se agrava. A duração do countdown só diminui ao avançar de nível — não ao acumular falhas.
+
+---
+
+## Integrantes
+
+- [Guilherme Santos Nunes](https://github.com/sannunez)
+- [Kaique Zaffarani](https://github.com/Z4ffarani)
+- [Kairo da Silva Silvestre de Carvalho](https://github.com/KairoSilvestre)
+- [Pedro Josué Pereira Almeida](https://github.com/Pedro-Josue)
 
 ---
 
@@ -89,7 +98,7 @@ Todo o tráfego externo trafega sobre **TLS 1.2+** (HTTPS/WSS) — fornecido pel
 
 ---
 
-## Rodando Localmente
+## Como executar
 
 ### Pré-requisitos
 - Node.js 22+, Python 3.12+, Redis (opcional — usa memória se ausente)
@@ -141,8 +150,6 @@ Acesse: `http://localhost:3000`
 
 > `REDIS_URL` é injetado automaticamente pelo plugin Redis do Railway.
 > Após o front-end estar no ar, atualize `ALLOWED_ORIGINS` no back-end com a URL gerada e faça **Redeploy**.
-
----
 
 ---
 
