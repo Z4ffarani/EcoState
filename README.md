@@ -8,6 +8,15 @@ A simulação rastreia **vetores de estado** distribuídos em seis plataformas (
 
 ---
 
+## Integrantes
+
+- [Guilherme Santos Nunes](https://github.com/sannunez)
+- [Kaique Zaffarani](https://github.com/Z4ffarani)
+- [Kairo da Silva Silvestre de Carvalho](https://github.com/KairoSilvestre)
+- [Pedro Josué Pereira Almeida](https://github.com/Pedro-Josue)
+
+---
+
 ## Regiões
 
 | Região | Cenário | Destaque visual |
