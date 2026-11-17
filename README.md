@@ -397,6 +397,14 @@ O plano segue as fases **Contenção → Erradicação → Recuperação → Li�
 
 ---
 
+## Projetos acadêmicos
+
+| Entrega | Repositório |
+|---|---|
+| Global Solution · Inteligência Artificial & Machine Learning · FIAP 2026.1 | [2026-SEM1-GS-ARTIFICIAL-INTELLIGENCE-AND-MACHINE-LEARNING](https://github.com/Z4FFARANI-EDUCATIONAL/2026-SEM1-GS-ARTIFICIAL-INTELLIGENCE-AND-MACHINE-LEARNING) |
+
+---
+
 ## Tecnologias
 
 [![Next.js](https://img.shields.io/badge/Next.js_15-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
