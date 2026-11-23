@@ -1,4 +1,4 @@
-![EcoState](frontend/public/banner.png)
+![EcoState](./assets/banner.png)
 
 **[Site](https://ecostate.up.railway.app) · [Trailer](https://youtu.be/sx-mbC32Hpo)**
 
